@@ -5,6 +5,10 @@ import lombok.Data;
 import javax.persistence.*;
 import java.time.LocalDateTime;
 
+/**
+ * Represents a booking count entity.
+ * Stores booking count information with status and timestamp.
+ */
 @Data
 @Entity
 @Table(name = "booking_count")
