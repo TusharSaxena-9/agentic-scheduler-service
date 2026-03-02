@@ -5,10 +5,10 @@ import io.temporal.workflow.WorkflowMethod;
 
 @WorkflowInterface
 public interface BookingCountWorkflow {
-    /**
-     * Executes the booking count workflow.
-     * This method orchestrates the fetching and saving of booking counts.
-     */
-    @WorkflowMethod
-    void run();
+  /**
+   * Executes the booking count workflow. This method orchestrates the fetching and saving of
+   * booking counts.
+   */
+  @WorkflowMethod
+  void run();
 }

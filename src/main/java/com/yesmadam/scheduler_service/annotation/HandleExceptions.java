@@ -6,22 +6,19 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a method for automatic exception handling via {@link com.yesmadam.scheduler_service.exception.handler.GlobalExceptionHandler}.
- * Catches, logs, and rethrows exceptions so Temporal can trigger retries where appropriate.
+ * Marks a method for automatic exception handling via {@link
+ * com.yesmadam.scheduler_service.exception.handler.GlobalExceptionHandler}. Catches, logs, and
+ * rethrows exceptions so Temporal can trigger retries where appropriate.
  *
- * Exception handling order:
- * 1. DataAccessException  → handleDataAccessException (retryable)
- * 2. RuntimeException     → handleRuntimeException (retryable)
- * 3. Exception            → handleGenericException, wrapped in RuntimeException (retryable)
+ * <p>Exception handling order: 1. DataAccessException → handleDataAccessException (retryable) 2.
+ * RuntimeException → handleRuntimeException (retryable) 3. Exception → handleGenericException,
+ * wrapped in RuntimeException (retryable)
  *
- * Usage:
- * {@code @HandleExceptions}
+ * <p>Usage: {@code @HandleExceptions}
  *
- * Typically used alongside {@link Loggable}:
- * {@code @Loggable(operation = "fetch-booking-counts")}
- * {@code @HandleExceptions}
+ * <p>Typically used alongside {@link Loggable}: {@code @Loggable(operation =
+ * "fetch-booking-counts")} {@code @HandleExceptions}
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface HandleExceptions {
-}
+public @interface HandleExceptions {}
