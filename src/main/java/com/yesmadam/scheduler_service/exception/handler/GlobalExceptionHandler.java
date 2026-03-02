@@ -24,22 +24,23 @@ public class GlobalExceptionHandler {
     /**
      * Handles database access exceptions.
      * These typically occur when there are issues with database connectivity or queries.
+     * @return RuntimeException wrapping the original DataAccessException
      */
-    public void handleDataAccessException(DataAccessException ex) {
+    public RuntimeException handleDataAccessException(DataAccessException ex) {
         String traceId = LoggingUtils.getCorrelationId();
-        ErrorInfo errorInfo = new ErrorInfo(
-            "DATABASE_ERROR",
-            "Database operation failed",
-            traceId,
-            "DATABASE"
-        );
-        
-        log.error("Database error [traceId={}]: {}", traceId, ex.getMessage(), ex);
-        LoggingUtils.logAuditEvent("DATABASE_ERROR", traceId, 
-            String.format("Database operation failed: %s", ex.getMessage()));
-        
-        // Could send to monitoring system here
+        ErrorInfo errorInfo = ErrorInfo.builder()
+                .errorType("DATABASE_ERROR")
+                .message("Database operation failed")
+                .traceId(traceId)
+                .component("DATABASE")
+                .build();
+
+        log.error("event=error error_type={} trace_id={} error={}", errorInfo.getErrorType(), traceId, ex.getMessage(), ex);
+        LoggingUtils.logAuditEvent("DATABASE_ERROR", traceId,
+                String.format("error=%s", ex.getMessage()));
         logMetrics(errorInfo);
+
+        return new RuntimeException("Database operation failed", ex);
     }
 
     /**
@@ -48,18 +49,16 @@ public class GlobalExceptionHandler {
      */
     public void handleSQLException(SQLException ex) {
         String traceId = LoggingUtils.getCorrelationId();
-        ErrorInfo errorInfo = new ErrorInfo(
-            "SQL_ERROR",
-            "SQL operation failed",
-            traceId,
-            "DATABASE"
-        );
-        
-        log.error("SQL error [traceId={}]: {}", traceId, ex.getMessage(), ex);
-        LoggingUtils.logAuditEvent("SQL_ERROR", traceId, 
-            String.format("SQL operation failed: %s", ex.getMessage()));
-        
-        // Could send to monitoring system here
+        ErrorInfo errorInfo = ErrorInfo.builder()
+                .errorType("SQL_ERROR")
+                .message("SQL operation failed")
+                .traceId(traceId)
+                .component("DATABASE")
+                .build();
+
+        log.error("event=error error_type={} trace_id={} error={}", errorInfo.getErrorType(), traceId, ex.getMessage(), ex);
+        LoggingUtils.logAuditEvent("SQL_ERROR", traceId,
+                String.format("error=%s", ex.getMessage()));
         logMetrics(errorInfo);
     }
 
@@ -70,27 +69,23 @@ public class GlobalExceptionHandler {
     public void handleConstraintViolationException(ConstraintViolationException ex) {
         String traceId = LoggingUtils.getCorrelationId();
         Map<String, String> errors = new HashMap<>();
-        
+
         Set<ConstraintViolation<?>> violations = ex.getConstraintViolations();
         for (ConstraintViolation<?> violation : violations) {
-            String fieldName = violation.getPropertyPath().toString();
-            String errorMessage = violation.getMessage();
-            errors.put(fieldName, errorMessage);
+            errors.put(violation.getPropertyPath().toString(), violation.getMessage());
         }
-        
-        ErrorInfo errorInfo = new ErrorInfo(
-            "CONSTRAINT_VIOLATION",
-            "Request constraints violated",
-            traceId,
-            "VALIDATION",
-            errors.toString()
-        );
-        
-        log.warn("Constraint violation [traceId={}]: {}", traceId, errors);
-        LoggingUtils.logAuditEvent("CONSTRAINT_VIOLATION", traceId, 
-            String.format("Constraint violation: %s", errors));
-        
-        // Could send to monitoring system here
+
+        ErrorInfo errorInfo = ErrorInfo.builder()
+                .errorType("CONSTRAINT_VIOLATION")
+                .message("Request constraints violated")
+                .traceId(traceId)
+                .component("VALIDATION")
+                .details(errors.toString())
+                .build();
+
+        log.warn("event=error error_type={} trace_id={} violations={}", errorInfo.getErrorType(), traceId, errors);
+        LoggingUtils.logAuditEvent("CONSTRAINT_VIOLATION", traceId,
+                String.format("violations=%s", errors));
         logMetrics(errorInfo);
     }
 
@@ -100,18 +95,16 @@ public class GlobalExceptionHandler {
      */
     public void handleIllegalArgumentException(IllegalArgumentException ex) {
         String traceId = LoggingUtils.getCorrelationId();
-        ErrorInfo errorInfo = new ErrorInfo(
-            "ILLEGAL_ARGUMENT",
-            ex.getMessage(),
-            traceId,
-            "BUSINESS_LOGIC"
-        );
-        
-        log.warn("Illegal argument [traceId={}]: {}", traceId, ex.getMessage(), ex);
-        LoggingUtils.logAuditEvent("ILLEGAL_ARGUMENT", traceId, 
-            String.format("Illegal argument: %s", ex.getMessage()));
-        
-        // Could send to monitoring system here
+        ErrorInfo errorInfo = ErrorInfo.builder()
+                .errorType("ILLEGAL_ARGUMENT")
+                .message(ex.getMessage())
+                .traceId(traceId)
+                .component("BUSINESS_LOGIC")
+                .build();
+
+        log.warn("event=error error_type={} trace_id={} error={}", errorInfo.getErrorType(), traceId, ex.getMessage(), ex);
+        LoggingUtils.logAuditEvent("ILLEGAL_ARGUMENT", traceId,
+                String.format("error=%s", ex.getMessage()));
         logMetrics(errorInfo);
     }
 
@@ -121,19 +114,17 @@ public class GlobalExceptionHandler {
      */
     public void handleIllegalStateException(IllegalStateException ex) {
         String traceId = LoggingUtils.getCorrelationId();
-        ErrorInfo errorInfo = new ErrorInfo(
-            "ILLEGAL_STATE",
-            "Application is in an invalid state",
-            traceId,
-            "APPLICATION",
-            ex.getMessage()
-        );
-        
-        log.error("Illegal state [traceId={}]: {}", traceId, ex.getMessage(), ex);
-        LoggingUtils.logAuditEvent("ILLEGAL_STATE", traceId, 
-            String.format("Illegal state: %s", ex.getMessage()));
-        
-        // Could send to monitoring system here
+        ErrorInfo errorInfo = ErrorInfo.builder()
+                .errorType("ILLEGAL_STATE")
+                .message("Application is in an invalid state")
+                .traceId(traceId)
+                .component("APPLICATION")
+                .details(ex.getMessage())
+                .build();
+
+        log.error("event=error error_type={} trace_id={} error={}", errorInfo.getErrorType(), traceId, ex.getMessage(), ex);
+        LoggingUtils.logAuditEvent("ILLEGAL_STATE", traceId,
+                String.format("error=%s", ex.getMessage()));
         logMetrics(errorInfo);
     }
 
@@ -143,19 +134,17 @@ public class GlobalExceptionHandler {
      */
     public void handleRuntimeException(RuntimeException ex) {
         String traceId = LoggingUtils.getCorrelationId();
-        ErrorInfo errorInfo = new ErrorInfo(
-            "RUNTIME_ERROR",
-            "An unexpected error occurred",
-            traceId,
-            "APPLICATION",
-            ex.getMessage()
-        );
-        
-        log.error("Runtime error [traceId={}]: {}", traceId, ex.getMessage(), ex);
-        LoggingUtils.logAuditEvent("RUNTIME_ERROR", traceId, 
-            String.format("Runtime error: %s", ex.getMessage()));
-        
-        // Could send to monitoring system here
+        ErrorInfo errorInfo = ErrorInfo.builder()
+                .errorType("RUNTIME_ERROR")
+                .message("An unexpected error occurred")
+                .traceId(traceId)
+                .component("APPLICATION")
+                .details(ex.getMessage())
+                .build();
+
+        log.error("event=error error_type={} trace_id={} error={}", errorInfo.getErrorType(), traceId, ex.getMessage(), ex);
+        LoggingUtils.logAuditEvent("RUNTIME_ERROR", traceId,
+                String.format("error=%s", ex.getMessage()));
         logMetrics(errorInfo);
     }
 
@@ -165,38 +154,33 @@ public class GlobalExceptionHandler {
      */
     public void handleGenericException(Exception ex) {
         String traceId = LoggingUtils.getCorrelationId();
-        ErrorInfo errorInfo = new ErrorInfo(
-            "UNEXPECTED_ERROR",
-            "An unexpected error occurred",
-            traceId,
-            "APPLICATION",
-            ex.getMessage()
-        );
-        
-        log.error("Unexpected error [traceId={}]: {}", traceId, ex.getMessage(), ex);
-        LoggingUtils.logAuditEvent("UNEXPECTED_ERROR", traceId, 
-            String.format("Unexpected error: %s", ex.getMessage()));
-        
-        // Could send to monitoring system here
+        ErrorInfo errorInfo = ErrorInfo.builder()
+                .errorType("UNEXPECTED_ERROR")
+                .message("An unexpected error occurred")
+                .traceId(traceId)
+                .component("APPLICATION")
+                .details(ex.getMessage())
+                .build();
+
+        log.error("event=error error_type={} trace_id={} error={}", errorInfo.getErrorType(), traceId, ex.getMessage(), ex);
+        LoggingUtils.logAuditEvent("UNEXPECTED_ERROR", traceId,
+                String.format("error=%s", ex.getMessage()));
         logMetrics(errorInfo);
     }
-    
+
     /**
      * Logs error metrics for monitoring.
      * This can be extended to send metrics to monitoring systems.
      * @param errorInfo the error information to log metrics for
      */
     private void logMetrics(ErrorInfo errorInfo) {
-        // Log metrics for monitoring systems
         LoggingUtils.logPerformanceMetric("error-count", 1, "occurrences");
         LoggingUtils.logPerformanceMetric(
-            String.format("error-%s", errorInfo.getErrorType().toLowerCase()), 
-            1, 
-            "occurrences"
+                String.format("error-%s", errorInfo.getErrorType().toLowerCase()),
+                1,
+                "occurrences"
         );
-        
-        // Could integrate with Micrometer, Prometheus, etc. here
-        log.info("Error metrics [type={}, component={}, traceId={}]", 
-            errorInfo.getErrorType(), errorInfo.getComponent(), errorInfo.getTraceId());
+        log.info("event=error_metric error_type={} component={} trace_id={}",
+                errorInfo.getErrorType(), errorInfo.getComponent(), errorInfo.getTraceId());
     }
 }
