@@ -5,9 +5,12 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import com.yesmadam.scheduler_service.booking.activity.BookingActivities;
-import com.yesmadam.scheduler_service.booking.workflow.BookingCountWorkflowImpl;
+import com.yesmadam.scheduler_service.bookingmonitor.activity.BookingMonitorActivities;
+import com.yesmadam.scheduler_service.bookingmonitor.workflow.BookingMonitorWorkflowImpl;
+import com.yesmadam.scheduler_service.crontiming.activity.CronTimingActivities;
 import com.yesmadam.scheduler_service.logging.LoggingUtils;
+import com.yesmadam.scheduler_service.packageexpiry.activity.PackageExpiryActivities;
+import com.yesmadam.scheduler_service.packageexpiry.workflow.PackageExpiryWorkflowImpl;
 
 import io.temporal.client.WorkflowClient;
 import io.temporal.worker.Worker;
@@ -20,6 +23,23 @@ public class TemporalWorkerConfig {
 
   @Value("${temporal.taskqueue.booking}")
   private String bookingTaskQueue;
+
+  @Value("${temporal.taskqueue.packageexpiry}")
+  private String packageExpiryTaskQueue;
+
+  @Value("${temporal.taskqueue.bookingmonitor}")
+  private String bookingMonitorTaskQueue;
+
+  @Bean
+  public Worker packageExpiryWorker(
+      WorkerFactory factory,
+      PackageExpiryActivities packageExpiryActivities,
+      CronTimingActivities cronTimingActivities) {
+    Worker worker = factory.newWorker(packageExpiryTaskQueue);
+    worker.registerWorkflowImplementationTypes(PackageExpiryWorkflowImpl.class);
+    worker.registerActivitiesImplementations(packageExpiryActivities, cronTimingActivities);
+    return worker;
+  }
 
   /**
    * Creates and configures the WorkerFactory bean.
@@ -39,35 +59,6 @@ public class TemporalWorkerConfig {
     } catch (Exception ex) {
       LoggingUtils.logOperationFailure("create-worker-factory", startTime, ex);
       throw new RuntimeException("Failed to create WorkerFactory", ex);
-
-    } finally {
-      LoggingUtils.clearContext();
-    }
-  }
-
-  /**
-   * Creates and configures the booking worker. Registers workflow implementations and activity
-   * implementations.
-   *
-   * @param factory the WorkerFactory dependency
-   * @param bookingActivities the BookingActivities dependency
-   * @return a configured Worker instance
-   */
-  @Bean
-  public Worker bookingWorker(WorkerFactory factory, BookingActivities bookingActivities) {
-    long startTime = LoggingUtils.logOperationStart("create-booking-worker");
-
-    try {
-      Worker worker = factory.newWorker(bookingTaskQueue);
-      worker.registerWorkflowImplementationTypes(BookingCountWorkflowImpl.class);
-      worker.registerActivitiesImplementations(bookingActivities);
-      LoggingUtils.logOperationComplete("create-booking-worker", startTime);
-      return worker;
-
-    } catch (Exception ex) {
-      LoggingUtils.logOperationFailure("create-booking-worker", startTime, ex);
-      throw new RuntimeException(
-          "Failed to create booking worker for task_queue=" + bookingTaskQueue, ex);
 
     } finally {
       LoggingUtils.clearContext();
@@ -101,5 +92,16 @@ public class TemporalWorkerConfig {
         LoggingUtils.clearContext();
       }
     };
+  }
+
+  @Bean
+  public Worker bookingMonitorWorker(
+      WorkerFactory factory,
+      BookingMonitorActivities bookingMonitorActivities,
+      CronTimingActivities cronTimingActivities) {
+    Worker worker = factory.newWorker(bookingMonitorTaskQueue);
+    worker.registerWorkflowImplementationTypes(BookingMonitorWorkflowImpl.class);
+    worker.registerActivitiesImplementations(bookingMonitorActivities, cronTimingActivities);
+    return worker;
   }
 }

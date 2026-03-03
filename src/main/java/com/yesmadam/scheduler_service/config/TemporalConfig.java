@@ -3,6 +3,7 @@ package com.yesmadam.scheduler_service.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
 
 import com.yesmadam.scheduler_service.logging.LoggingUtils;
 
@@ -18,6 +19,11 @@ public class TemporalConfig {
 
   @Value("${temporal.server.target}")
   private String temporalTarget;
+
+  @Bean
+  public RestTemplate restTemplate() {
+    return new RestTemplate();
+  }
 
   /**
    * Creates and configures the WorkflowServiceStubs bean.
