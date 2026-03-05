@@ -21,9 +21,6 @@ import lombok.extern.slf4j.Slf4j;
 @Configuration
 public class TemporalWorkerConfig {
 
-  @Value("${temporal.taskqueue.booking}")
-  private String bookingTaskQueue;
-
   @Value("${temporal.taskqueue.packageexpiry}")
   private String packageExpiryTaskQueue;
 

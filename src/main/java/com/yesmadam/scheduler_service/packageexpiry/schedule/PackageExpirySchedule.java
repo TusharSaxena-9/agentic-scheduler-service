@@ -18,9 +18,9 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Spring configuration class that registers the Temporal schedule for package expiry workflow.
  *
- * <p>This class creates and configures a Temporal schedule that automatically triggers the package
- * expiry workflow on a daily basis. The schedule is configured to run at 12:10 AM IST (Asia/Kolkata
- * timezone) as specified by the cron expression.
+ * <p>This class creates and configures a Temporal schedule for the package expiry workflow. The
+ * schedule is created on application startup and is intentionally created in a <b>paused</b> state
+ * so it can be enabled manually from the UI.
  *
  * <p>Key features:
  *
@@ -29,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>Idempotent creation - skips if schedule already exists
  *   <li>Comprehensive audit logging for schedule operations
  *   <li>Proper error handling and reporting
+ *   <li>Paused-by-default behavior for manual enablement
  *   <li>Configurable cron expression and task queue
  * </ul>
  *
@@ -77,6 +78,9 @@ public class PackageExpirySchedule {
    * that will trigger the {@link PackageExpiryWorkflow} according to the configured cron
    * expression.
    *
+   * <p>The schedule is intentionally created in a paused state so that it can be enabled manually
+   * from the UI.
+   *
    * <p>Schedule configuration:
    *
    * <ul>
@@ -101,7 +105,7 @@ public class PackageExpirySchedule {
     LoggingUtils.logAuditEvent(
         "SCHEDULE_CREATION_STARTED",
         scheduleId,
-        String.format("cron=%s timezone=Asia/Kolkata", cronExpression));
+        String.format("cron=%s timezone=Asia/Kolkata initial_state=paused", cronExpression));
 
     try {
       // Create the Temporal schedule with specified configuration
@@ -125,16 +129,17 @@ public class PackageExpirySchedule {
                           .build())
                   .build(),
               ScheduleOptions.newBuilder().build())
-          .pause();
-
+          .pause("Created paused by default; enable manually via UI");
       LoggingUtils.logAuditEvent(
-          "SCHEDULE_CREATION_COMPLETED", scheduleId, "Schedule created successfully");
+          "SCHEDULE_CREATED_PAUSED",
+          scheduleId,
+          "Schedule created and paused intentionally (enable manually via UI)");
 
     } catch (ScheduleAlreadyRunningException ex) {
       // Schedule already exists - this is expected on restarts
       log.info("event=schedule_skipped schedule_id={} reason=already_exists", scheduleId);
       LoggingUtils.logAuditEvent(
-          "SCHEDULE_ALREADY_EXISTS", scheduleId, "Schedule was already running, skipping creation");
+          "SCHEDULE_ALREADY_EXISTS", scheduleId, "Schedule already exists; skipping creation");
 
     } catch (RuntimeException ex) {
       // Runtime exceptions - log and rethrow

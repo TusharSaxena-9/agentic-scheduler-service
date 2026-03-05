@@ -16,31 +16,75 @@ import io.temporal.client.schedules.*;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Registers the Temporal schedule for the booking monitor workflow. Runs every minute between 9AM
- * and 11:59PM IST.
+ * Spring configuration class that registers the Temporal schedule for the booking monitor workflow.
+ *
+ * <p>This class creates and configures a Temporal schedule that triggers the {@link
+ * BookingMonitorWorkflow} according to the configured cron expression. The schedule is created on
+ * application startup and is intentionally created in a <b>paused</b> state so it can be enabled
+ * manually from the UI.
+ *
+ * <p>Key features:
+ *
+ * <ul>
+ *   <li>Automatic schedule creation on application startup
+ *   <li>Idempotent creation - skips if schedule already exists
+ *   <li>Audit logging for schedule operations
+ *   <li>Paused-by-default behavior for manual enablement
+ * </ul>
+ *
+ * <p>Configuration properties:
+ *
+ * <ul>
+ *   <li>{@code temporal.taskqueue.bookingmonitor} - Task queue for workflow execution
+ *   <li>{@code temporal.schedule.bookingmonitor} - Unique schedule identifier
+ *   <li>{@code temporal.cron.bookingmonitor} - Cron expression for schedule timing
+ * </ul>
  */
 @Slf4j
 @Configuration
 public class BookingMonitorSchedule {
 
+  /** Temporal task queue for booking monitor workflow execution. */
   @Value("${temporal.taskqueue.bookingmonitor}")
   private String taskQueue;
 
+  /** Unique Temporal schedule identifier. */
   @Value("${temporal.schedule.bookingmonitor}")
   private String scheduleId;
 
+  /** Cron expression used by Temporal to determine the schedule. */
   @Value("${temporal.cron.bookingmonitor}")
   private String cronExpression;
 
+  /** Temporal client used to create and manage schedules. */
   private final ScheduleClient scheduleClient;
 
+  /**
+   * Creates a new BookingMonitorSchedule with required dependencies.
+   *
+   * @param scheduleClient the Temporal schedule client for creating schedules
+   */
   public BookingMonitorSchedule(ScheduleClient scheduleClient) {
     this.scheduleClient = scheduleClient;
   }
 
   /**
-   * Creates the Temporal schedule for the booking monitor workflow. Skips creation if the schedule
-   * already exists.
+   * Creates the Temporal schedule for the booking monitor workflow.
+   *
+   * <p>This method is automatically called after Spring bean construction. It creates a schedule
+   * that will trigger the {@link BookingMonitorWorkflow} according to the configured cron
+   * expression.
+   *
+   * <p>The schedule is intentionally created in a paused state so that it can be enabled manually
+   * from the UI.
+   *
+   * <p>Error handling:
+   *
+   * <ul>
+   *   <li>If schedule already exists - logs info and continues
+   *   <li>If creation fails - logs error and rethrows exception
+   *   <li>All operations are logged for audit purposes
+   * </ul>
    */
   @PostConstruct
   @Loggable(operation = "create-booking-monitor-schedule")
@@ -49,7 +93,7 @@ public class BookingMonitorSchedule {
     LoggingUtils.logAuditEvent(
         "SCHEDULE_CREATION_STARTED",
         scheduleId,
-        String.format("cron=%s timezone=Asia/Kolkata", cronExpression));
+        String.format("cron=%s timezone=Asia/Kolkata initial_state=paused", cronExpression));
 
     try {
       scheduleClient
@@ -72,17 +116,17 @@ public class BookingMonitorSchedule {
                           .build())
                   .build(),
               ScheduleOptions.newBuilder().build())
-          .pause();
+          .pause("Created paused by default; enable manually via UI");
 
       LoggingUtils.logAuditEvent(
-          "SCHEDULE_CREATION_COMPLETED",
+          "SCHEDULE_CREATED_PAUSED",
           scheduleId,
-          "Booking monitor schedule created successfully");
+          "Schedule created and paused intentionally (enable manually via UI)");
 
     } catch (ScheduleAlreadyRunningException ex) {
       log.info("event=schedule_skipped schedule_id={} reason=already_exists", scheduleId);
       LoggingUtils.logAuditEvent(
-          "SCHEDULE_ALREADY_EXISTS", scheduleId, "Schedule was already running, skipping creation");
+          "SCHEDULE_ALREADY_EXISTS", scheduleId, "Schedule already exists; skipping creation");
 
     } catch (RuntimeException ex) {
       LoggingUtils.logAuditEvent(
