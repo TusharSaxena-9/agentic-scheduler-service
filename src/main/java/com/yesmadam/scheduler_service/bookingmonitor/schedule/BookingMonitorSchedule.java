@@ -91,7 +91,7 @@ public class BookingMonitorSchedule {
   public void createBookingMonitorSchedule() {
     LoggingUtils.setCorrelationId(scheduleId);
     LoggingUtils.logAuditEvent(
-        "SCHEDULE_CREATION_STARTED",
+        "SCHEDULE_CREATE_STARTED",
         scheduleId,
         String.format("cron=%s timezone=Asia/Kolkata initial_state=paused", cronExpression));
 

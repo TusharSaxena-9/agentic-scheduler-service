@@ -103,7 +103,7 @@ public class PackageExpirySchedule {
   public void createPackageExpirySchedule() {
     LoggingUtils.setCorrelationId(scheduleId);
     LoggingUtils.logAuditEvent(
-        "SCHEDULE_CREATION_STARTED",
+        "SCHEDULE_CREATE_STARTED",
         scheduleId,
         String.format("cron=%s timezone=Asia/Kolkata initial_state=paused", cronExpression));
 
