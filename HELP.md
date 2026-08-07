@@ -1,7 +1,7 @@
 # Read Me First
 The following was discovered as part of building this project:
 
-* The original package name 'com.yesmadam.scheduler-service' is invalid and this project uses 'com.yesmadam.scheduler_service' instead.
+* The original package name 'com.yesmadam.scheduler-service' is invalid and this project uses 'com.yesmadam.schedulerservice' instead.
 
 # Getting Started
 

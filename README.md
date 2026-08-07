@@ -18,7 +18,7 @@ Temporal-based scheduling service responsible for executing recurring and backgr
 ## Package Structure
 
 ```
-com.yesmadam.scheduler_service
+com.yesmadam.schedulerservice
 │
 ├── annotation
 │   ├── Loggable.java               # Marks methods for automatic logging via AOP
@@ -103,7 +103,7 @@ MDC correlation ID is set automatically by `LoggingAspect` and cleared in `final
 ### 1. Create a new feature package
 
 ```
-src/main/java/com/yesmadam/scheduler_service/{feature}/
+src/main/java/com/yesmadam/schedulerservice/{feature}/
     ├── model/          YourEntity.java
     ├── repository/     YourRepo.java
     ├── activity/       YourActivities.java (interface)
