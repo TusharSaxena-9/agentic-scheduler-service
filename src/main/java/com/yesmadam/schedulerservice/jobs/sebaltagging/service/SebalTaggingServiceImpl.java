@@ -26,8 +26,6 @@ import com.yesmadam.schedulerservice.jobs.sebaltagging.model.SubCategoryRebookin
 import com.yesmadam.schedulerservice.jobs.sebaltagging.projections.QualifyingFirstOrderProjection;
 import com.yesmadam.schedulerservice.jobs.sebaltagging.projections.RankedTagProjection;
 import com.yesmadam.schedulerservice.jobs.sebaltagging.projections.SubsequentOrderProjection;
-import com.yesmadam.schedulerservice.jobs.sebaltagging.repository.SebalTaggingCohortRepository;
-import com.yesmadam.schedulerservice.jobs.sebaltagging.repository.SpSebalSubCategoryTagRepository;
 import com.yesmadam.schedulerservice.service.interfaces.SettingService;
 import com.yesmadam.schedulerservice.utils.QueryTimer;
 
@@ -67,18 +65,13 @@ public class SebalTaggingServiceImpl implements SebalTaggingService {
    */
   private static final int REBOOK_USER_ID_BATCH_SIZE = 5000;
 
-  private final SebalTaggingCohortRepository cohortRepository;
-  private final SpSebalSubCategoryTagRepository tagRepository;
+  private final SebalTaggingReader reader;
   private final SebalTaggingWriter writer;
   private final SettingService settingService;
 
   public SebalTaggingServiceImpl(
-      SebalTaggingCohortRepository cohortRepository,
-      SpSebalSubCategoryTagRepository tagRepository,
-      SebalTaggingWriter writer,
-      SettingService settingService) {
-    this.cohortRepository = cohortRepository;
-    this.tagRepository = tagRepository;
+      SebalTaggingReader reader, SebalTaggingWriter writer, SettingService settingService) {
+    this.reader = reader;
     this.writer = writer;
     this.settingService = settingService;
   }
@@ -145,7 +138,7 @@ public class SebalTaggingServiceImpl implements SebalTaggingService {
         timer
             .time(
                 "findQualifyingFirstOrders",
-                () -> cohortRepository.findQualifyingFirstOrders(chunk.getStart(), chunk.getEnd()))
+                () -> reader.findQualifyingFirstOrders(chunk.getStart(), chunk.getEnd()))
             .stream()
             .map(SebalTaggingServiceImpl::toRow)
             .toList();
@@ -217,7 +210,7 @@ public class SebalTaggingServiceImpl implements SebalTaggingService {
     List<SubsequentOrderProjection> candidates = new ArrayList<>();
     for (List<Long> batch : Lists.partition(userIds, REBOOK_USER_ID_BATCH_SIZE)) {
       candidates.addAll(
-          cohortRepository.findCompletedOrdersForRebookCheck(batch, lookaheadStart, lookaheadEnd));
+          reader.findCompletedOrdersForRebookCheck(batch, lookaheadStart, lookaheadEnd));
       heartbeat.run();
     }
     return candidates;
@@ -254,8 +247,8 @@ public class SebalTaggingServiceImpl implements SebalTaggingService {
       sweepRowsNotTouchedByRun(runId, heartbeat);
     }
 
-    List<Integer> touchedSubCategoryIds = writer.findTouchedSubCategoryIds(runId);
-    List<RankedTagProjection> ranked = writer.computeRanks(touchedSubCategoryIds);
+    List<Integer> touchedSubCategoryIds = reader.findTouchedSubCategoryIds(runId);
+    List<RankedTagProjection> ranked = reader.computeRanks(touchedSubCategoryIds);
 
     logRankingScope(touchedSubCategoryIds, ranked);
     heartbeat.run();
@@ -273,9 +266,7 @@ public class SebalTaggingServiceImpl implements SebalTaggingService {
       revertRunModeToIncremental();
     }
 
-    int subCategoriesTiered = (int) tagRepository.countDistinctTieredSubCategories();
-    int spsTagged = (int) tagRepository.countByTierIsNotNull();
-    return new SebalTaggingTierResult(subCategoriesTiered, spsTagged);
+    return reader.countTierResult();
   }
 
   /**

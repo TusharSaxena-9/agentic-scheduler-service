@@ -89,7 +89,7 @@
 		<dependency>
 			<groupId>com.ysmdm</groupId>
 			<artifactId>ym-common-entity</artifactId>
-			<version>1.9.0-ROSE-ORDER-SNAPSHOT</version>
+			<version>1.10.8</version>
 		</dependency>
 	</dependencies>
 

@@ -13,8 +13,6 @@ import com.yesmadam.schedulerservice.jobs.sebaltagging.model.SubCategoryRebookin
 import com.yesmadam.schedulerservice.jobs.sebaltagging.projections.RankedTagProjection;
 import com.yesmadam.schedulerservice.jobs.sebaltagging.repository.SebalTaggingBatchDao;
 import com.yesmadam.schedulerservice.jobs.sebaltagging.repository.SebalTaggingWatermarkRepository;
-import com.yesmadam.schedulerservice.jobs.sebaltagging.repository.SpSebalSubCategoryTagLedgerRepository;
-import com.yesmadam.schedulerservice.jobs.sebaltagging.repository.SpSebalSubCategoryTagRepository;
 
 /**
  * Persists SEBAL sub-category tagging results.
@@ -37,18 +35,11 @@ public class SebalTaggingWriter {
   /** Singleton watermark row id — this job tracks one global cursor, not one per sub-category. */
   static final Long WATERMARK_ID = 1L;
 
-  private final SpSebalSubCategoryTagRepository tagRepository;
-  private final SpSebalSubCategoryTagLedgerRepository ledgerRepository;
   private final SebalTaggingWatermarkRepository watermarkRepository;
   private final SebalTaggingBatchDao batchDao;
 
   public SebalTaggingWriter(
-      SpSebalSubCategoryTagRepository tagRepository,
-      SpSebalSubCategoryTagLedgerRepository ledgerRepository,
-      SebalTaggingWatermarkRepository watermarkRepository,
-      SebalTaggingBatchDao batchDao) {
-    this.tagRepository = tagRepository;
-    this.ledgerRepository = ledgerRepository;
+      SebalTaggingWatermarkRepository watermarkRepository, SebalTaggingBatchDao batchDao) {
     this.watermarkRepository = watermarkRepository;
     this.batchDao = batchDao;
   }
@@ -112,25 +103,12 @@ public class SebalTaggingWriter {
     return batchDao.resetRowsNotTouchedByRun(runId);
   }
 
-  /** Every sub-category this run's chunks touched — the finalize step's re-tiering scope. */
-  public List<Integer> findTouchedSubCategoryIds(String runId) {
-    return ledgerRepository.findDistinctSubCategoryIdsByRunId(runId);
-  }
-
-  /** Freshly-computed rate/rank/tier for every row in the given sub-categories — a plain read. */
-  public List<RankedTagProjection> computeRanks(List<Integer> subCategoryIds) {
-    if (subCategoryIds.isEmpty()) {
-      return List.of();
-    }
-    return tagRepository.computeRanksForSubCategories(subCategoryIds);
-  }
-
   /**
    * Applies one batch of already-computed rank/tier values. Its own transaction, independent of
    * every other batch — so a run touching many sub-categories doesn't hold one long write lock
    * over all of them, and a failure partway through only needs this batch (and any after it)
-   * re-applied, which is safe since {@link #computeRanks} is a pure function of the current
-   * counts.
+   * re-applied, which is safe since {@link SebalTaggingReader#computeRanks} is a pure function of
+   * the current counts.
    */
   @Transactional
   public void applyRankBatch(List<RankedTagProjection> batch) {
