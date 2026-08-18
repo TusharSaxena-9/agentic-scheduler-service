@@ -22,7 +22,8 @@ import lombok.extern.slf4j.Slf4j;
       "${temporal.taskqueue.packageexpiry}",
       "${temporal.taskqueue.bookingmonitor}",
       "${temporal.taskqueue.roseorder}",
-      "${temporal.taskqueue.sebaltagging}"
+      "${temporal.taskqueue.sebaltagging}",
+      "${temporal.taskqueue.passbookmismatch}"
     })
 public class CronTimingActivitiesImpl implements CronTimingActivities {
 
