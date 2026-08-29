@@ -1,7 +1,5 @@
 package com.yesmadam.schedulerservice.jobs.packageexpiry.workflow;
 
-import com.yesmadam.schedulerservice.jobs.packageexpiry.schedule.PackageExpirySchedule;
-
 import io.temporal.workflow.WorkflowInterface;
 import io.temporal.workflow.WorkflowMethod;
 
@@ -28,7 +26,8 @@ import io.temporal.workflow.WorkflowMethod;
  *   <li>Activity timeouts and retry policies
  * </ul>
  *
- * <p>This workflow is scheduled to run daily at 12:10 AM IST via {@link PackageExpirySchedule}.
+ * <p>Scheduled daily at 00:10 IST. The schedule is declared in {@code schedules.yml} and reconciled
+ * into Temporal on startup.
  *
  * @author Scheduler Service Team
  * @since 1.0.0

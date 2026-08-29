@@ -14,16 +14,19 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Implementation of cron timing tracking activities. Reusable across any workflow that needs
  * start/end time tracking in tbl_cron_time.
+ *
+ * <p><b>Legacy — do not extend.</b> New jobs must not write {@code tbl_cron_time}; Temporal already
+ * records start, end, status, failure detail and retries, queryable through visibility. This
+ * registration lists task queue <em>tiers</em> rather than individual jobs, so it stops growing as
+ * jobs are added. See rule 7 in {@code CLAUDE.md}.
  */
 @Slf4j
 @Component
 @ActivityImpl(
     taskQueues = {
-      "${temporal.taskqueue.packageexpiry}",
-      "${temporal.taskqueue.bookingmonitor}",
-      "${temporal.taskqueue.roseorder}",
-      "${temporal.taskqueue.sebaltagging}",
-      "${temporal.taskqueue.passbookmismatch}"
+      "${temporal.taskqueue.light}",
+      "${temporal.taskqueue.standard}",
+      "${temporal.taskqueue.heavy}"
     })
 public class CronTimingActivitiesImpl implements CronTimingActivities {
 

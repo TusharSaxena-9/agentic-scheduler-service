@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-@ActivityImpl(taskQueues = "${temporal.taskqueue.roseorder}")
+@ActivityImpl(taskQueues = "${temporal.taskqueue.heavy}")
 public class RoseOrderActivitiesImpl implements RoseOrderActivities {
 
   private final RoseOrderService roseOrderService;

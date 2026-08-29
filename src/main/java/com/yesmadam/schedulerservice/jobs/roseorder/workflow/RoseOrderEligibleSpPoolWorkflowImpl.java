@@ -29,7 +29,7 @@ import lombok.extern.slf4j.Slf4j;
  * Temporal replay.
  */
 @Slf4j
-@WorkflowImpl(taskQueues = "${temporal.taskqueue.roseorder}")
+@WorkflowImpl(taskQueues = "${temporal.taskqueue.heavy}")
 public class RoseOrderEligibleSpPoolWorkflowImpl implements RoseOrderEligibleSpPoolWorkflow {
 
   /** SPs evaluated per chunk activity; each chunk is one retryable, transactional step. */

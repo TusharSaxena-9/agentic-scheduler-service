@@ -66,24 +66,28 @@ services:
     depends_on:
       - temporal
 
-  scheduler-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SPRING_PROFILE: uat
-    container_name: scheduler-service-uat
-    ports:
-      - "8060:8060"
-      - "9090:9090"
-    environment:
-      - TEMPORAL_SERVER_TARGET=temporal:7233
-      - AWS_REGION=ap-south-1
-    volumes:
-      - ${HOME}/.aws:/root/.aws:ro
-    depends_on:
-      temporal-namespace-init:
-        condition: service_completed_successfully
+  # scheduler-service is commented out: this stack provides the Temporal server, its
+  # database and the UI. Run the app from your IDE or `mvn spring-boot:run` against
+  # temporal on localhost:7233, so a restart is not a container rebuild.
+  # Uncomment to run everything in Docker.
+  # scheduler-service:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     args:
+  #       SPRING_PROFILE: uat
+  #   container_name: scheduler-service-uat
+  #   ports:
+  #     - "8060:8060"
+  #     - "9090:9090"
+  #   environment:
+  #     - TEMPORAL_SERVER_TARGET=temporal:7233
+  #     - AWS_REGION=ap-south-1
+  #   volumes:
+  #     - ${HOME}/.aws:/root/.aws:ro
+  #   depends_on:
+  #     temporal-namespace-init:
+  #       condition: service_completed_successfully
 
 volumes:
   temporal-mysql-data:

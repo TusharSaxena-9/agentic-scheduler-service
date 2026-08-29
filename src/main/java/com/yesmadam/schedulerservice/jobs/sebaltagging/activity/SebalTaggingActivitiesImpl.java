@@ -23,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-@ActivityImpl(taskQueues = "${temporal.taskqueue.sebaltagging}")
+@ActivityImpl(taskQueues = "${temporal.taskqueue.heavy}")
 public class SebalTaggingActivitiesImpl implements SebalTaggingActivities {
 
   private final SebalTaggingService sebalTaggingService;

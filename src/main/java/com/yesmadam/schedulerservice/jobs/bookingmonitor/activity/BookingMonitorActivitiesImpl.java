@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-@ActivityImpl(taskQueues = "${temporal.taskqueue.bookingmonitor}")
+@ActivityImpl(taskQueues = "${temporal.taskqueue.light}")
 public class BookingMonitorActivitiesImpl implements BookingMonitorActivities {
 
   @Value("${com.whatsapp.template.name}")

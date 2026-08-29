@@ -1,0 +1,83 @@
+# Declared scheduled jobs — the source of truth for what exists in Temporal.
+#
+# Read on startup by ScheduleReconciler, which is CREATE-ONLY: a job here is created if it is missing
+# from Temporal, and left exactly as it is if it already exists. Editing a cron, tier or policy below
+# does NOT reach a schedule that already exists — delete that schedule in the Temporal UI first, then
+# deploy, then unpause it. Anything not listed here is left alone.
+#
+# Two fields behave differently from the rest:
+#
+#   enabled   applies on CREATION only. Once a schedule exists its paused state belongs to whoever
+#             is operating it — pausing a job during an incident must survive the next deploy. Pause
+#             and unpause from the Temporal UI or CLI, not from here.
+#
+#   name      derives the schedule ID (<name>-schedule) and workflow ID (<name>-workflow). Renaming
+#             a job orphans the old schedule rather than renaming it.
+#
+# Omitted policy fields inherit temporal.schedule.defaults.* from application.properties. Inheriting
+# is fine; inheriting without having thought about it is what rule 5 in CLAUDE.md is about.
+#
+# cron is FIVE-field Temporal cron (minute hour day-of-month month day-of-week). Spring's six-field
+# format with a leading seconds field and '?' does NOT port directly — see
+# docs/temporal-migration/job-inventory.md for per-job translations of the incoming jobs.
+
+scheduler:
+  reconcile-on-startup: true
+
+  jobs:
+
+    - name: package-expiry
+      workflow: com.yesmadam.schedulerservice.jobs.packageexpiry.workflow.PackageExpiryWorkflow
+      tier: standard
+      cron: "10 0 * * *"
+      enabled: false
+      owner: platform
+      description: Expire active package sessions and write multi-session financial reports
+
+    - name: booking-monitor
+      workflow: com.yesmadam.schedulerservice.jobs.bookingmonitor.workflow.BookingMonitorWorkflow
+      tier: light
+      # Every minute, 09:00–23:59. Jitter is pinned off: the window this job queries is derived from
+      # its firing time, so spreading the start would overlap or gap consecutive windows.
+      cron: "* 9-23 * * *"
+      jitter: PT0S
+      run-timeout: PT5M
+      enabled: false
+      owner: platform
+      description: Alert when Android or iOS bookings drop to zero in the trailing window
+
+    - name: rose-order-eligible-sp-pool
+      workflow: com.yesmadam.schedulerservice.jobs.roseorder.workflow.RoseOrderEligibleSpPoolWorkflow
+      tier: heavy
+      cron: "0 2 * * *"
+      # Longest observed run is ~31 minutes; this is roughly 2x that.
+      run-timeout: PT1H
+      enabled: false
+      owner: platform
+      description: Recompute the rose order eligible SP pool
+
+    - name: sebal-tagging
+      workflow: com.yesmadam.schedulerservice.jobs.sebaltagging.workflow.SebalTaggingWorkflow
+      tier: heavy
+      # Runs after rose-order-eligible-sp-pool so the day's eligibility is settled first. That
+      # ordering is currently expressed only as a one-hour gap between two cron entries — it is not
+      # enforced, and jitter must stay small here until it is.
+      cron: "0 3 * * *"
+      jitter: PT2M
+      run-timeout: PT2H
+      enabled: false
+      owner: platform
+      description: Update SEBAL sub-category SP tags
+
+    - name: passbook-mismatch
+      workflow: com.yesmadam.schedulerservice.jobs.passbookmismatch.workflow.PassbookMismatchWorkflow
+      tier: standard
+      cron: "*/30 * * * *"
+      # Short catchup: a stale audit of a window that has already passed is not worth mailing.
+      catchup-window: PT5M
+      run-timeout: PT15M
+      # Mails ten people. A repeated failure should stop and be looked at rather than keep firing.
+      pause-on-failure: true
+      enabled: false
+      owner: finance
+      description: Audit SP passbook entries in the trailing window and mail mismatches

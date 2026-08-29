@@ -25,7 +25,7 @@ import io.temporal.workflow.Workflow;
  * Workflow#getLogger} rather than a {@code @Slf4j} field: a plain logger re-emits every line on
  * replay.
  */
-@WorkflowImpl(taskQueues = "${temporal.taskqueue.passbookmismatch}")
+@WorkflowImpl(taskQueues = "${temporal.taskqueue.standard}")
 public class PassbookMismatchWorkflowImpl implements PassbookMismatchWorkflow {
 
   private static final Logger log = Workflow.getLogger(PassbookMismatchWorkflowImpl.class);

@@ -32,7 +32,7 @@ import io.temporal.workflow.Workflow;
  * plain logger re-emits every line during replay, so a workflow that gets replayed a few times
  * duplicates its whole log history.
  */
-@WorkflowImpl(taskQueues = "${temporal.taskqueue.sebaltagging}")
+@WorkflowImpl(taskQueues = "${temporal.taskqueue.heavy}")
 public class SebalTaggingWorkflowImpl implements SebalTaggingWorkflow {
 
   private static final Logger log = Workflow.getLogger(SebalTaggingWorkflowImpl.class);

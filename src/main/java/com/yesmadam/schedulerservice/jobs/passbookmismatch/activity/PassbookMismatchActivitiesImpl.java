@@ -16,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-@ActivityImpl(taskQueues = "${temporal.taskqueue.passbookmismatch}")
+@ActivityImpl(taskQueues = "${temporal.taskqueue.standard}")
 public class PassbookMismatchActivitiesImpl implements PassbookMismatchActivities {
 
   private final PassbookMismatchService passbookMismatchService;

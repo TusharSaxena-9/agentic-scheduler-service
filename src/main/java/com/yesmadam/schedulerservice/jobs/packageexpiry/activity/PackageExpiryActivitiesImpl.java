@@ -40,7 +40,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-@ActivityImpl(taskQueues = "${temporal.taskqueue.packageexpiry}")
+@ActivityImpl(taskQueues = "${temporal.taskqueue.standard}")
 public class PackageExpiryActivitiesImpl implements PackageExpiryActivities {
 
   private final PackageExpiryService packageExpiryService;

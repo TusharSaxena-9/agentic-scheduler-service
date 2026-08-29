@@ -58,7 +58,7 @@ import lombok.extern.slf4j.Slf4j;
  * @since 1.0.0
  */
 @Slf4j
-@WorkflowImpl(taskQueues = "${temporal.taskqueue.packageexpiry}")
+@WorkflowImpl(taskQueues = "${temporal.taskqueue.standard}")
 public class PackageExpiryWorkflowImpl implements PackageExpiryWorkflow {
 
   /**

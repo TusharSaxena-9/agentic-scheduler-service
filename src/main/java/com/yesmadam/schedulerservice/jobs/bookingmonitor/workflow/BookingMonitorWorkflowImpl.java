@@ -23,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
  * Spring. All property injection must be done in activity implementations instead.
  */
 @Slf4j
-@WorkflowImpl(taskQueues = "${temporal.taskqueue.bookingmonitor}")
+@WorkflowImpl(taskQueues = "${temporal.taskqueue.light}")
 public class BookingMonitorWorkflowImpl implements BookingMonitorWorkflow {
 
   private final BookingMonitorActivities bookingMonitorActivities =
