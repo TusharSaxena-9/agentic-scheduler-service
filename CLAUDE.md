@@ -49,6 +49,12 @@ a different window from the one it actually queried — silently, with a green s
 job, and absent entirely on a developer machine. Schedules fire in the zone set on
 `ScheduleSpec.setTimeZoneName(...)`, which is a separate thing from the JVM zone.
 
+**For a monitoring/alerting job, derive the window from the nominal scheduled time, not wall-clock at
+fire time.** That's what makes consecutive windows tile — no gap, no double count — regardless of
+scheduling jitter or a slow start. If the read window must overlap anyway (to cover commit-versus-
+timestamp skew), dedupe at the alert layer on the identity of the thing being alerted about, not by
+shrinking the window.
+
 ## 2. Logging in workflows
 
 `Workflow.getLogger(YourWorkflowImpl.class)`. Not `@Slf4j`, not `LoggerFactory`.
@@ -293,6 +299,9 @@ per job any more, and `ScheduleReconciler` creates whatever is declared but miss
 
 Anything omitted inherits `temporal.schedule.defaults.*`. Inheriting is fine; inheriting without
 having thought about it is what rule 5 is about.
+
+**Add new entries in alphabetical order by `name`.** Position has no effect on execution — that's
+driven by each job's own cron — it's purely so a job can be found in this file quickly.
 
 ### Changing an existing schedule needs a manual delete
 
@@ -545,6 +554,9 @@ What that means in practice:
   When a write cannot be made naturally convergent, record what has already been applied — a
   `(runId, chunkId)` marker row written in the same transaction — and make the write a no-op when its
   marker is already there. `runId` on the data alone is a provenance tag, not an idempotency key.
+- **Build any idempotency key from identifiers stable across retries — never the attempt number.**
+  `jobName + scheduledTime + businessEventId` is stable; `runId + activityAttempt` is not — it gives
+  every retry of the same logical attempt a different key, which defeats the dedup it exists for.
 - **Send outbound messages last, and once.** Mail and WhatsApp cannot be rolled back. An activity
   that queries, writes and then emails will re-email on every retry. Put the send in its own activity,
   after the write commits, and give it a non-retryable classification for permanent failures (rule 4)
@@ -628,6 +640,78 @@ timeout — a job with no timing history cannot be tiered by anything except gue
 
 ---
 
+## 16. HQL first, native SQL only when HQL can't express it
+
+Write repository queries in HQL/JPQL by default. Drop to native SQL only when HQL genuinely cannot
+express the query — window functions, CTEs, multi-row `VALUES`/upsert statements, DB-specific
+functions, cross-schema joins. Native is the fallback, not a default choice of convenience.
+
+Read queries return a projection (an interface or a DTO), not the entity. Select only the columns
+the query needs — smaller payload, no accidental full-entity fetch, nothing unbounded riding along.
+
+## 17. Autoscaling and a shared database don't mix
+
+Don't autoscale a task queue that holds long, DB-heavy activities. An HPA reacting to CPU or backlog
+on a DB-bound tier adds pods, which adds queries to the database that's already the bottleneck, which
+slows every activity further and grows the backlog further — a feedback loop into the shared resource,
+not a fix. Fix the replica count for that tier and let work queue in Temporal instead, where waiting
+is durable, observable and free.
+
+Put the real ceiling in the database, not the application. A per-pod connection-pool size is a
+self-imposed bulkhead, not an enforced limit — it evaporates the moment someone scales out or raises
+the pool. Cap the DB account itself (MySQL: `MAX_USER_CONNECTIONS`), sized as
+`floor(account_connection_budget / max_replicas)`, so the bound survives an HPA event or a config
+change nobody reviewed. Give the heavy tier a fast connection-acquire timeout (seconds, not the
+30s-plus default) with its own, slower backoff for pool-exhausted/too-many-connections errors
+specifically — and for a periodic job, prefer failing fast and letting the next scheduled tick retry
+over burning attempts against an already-saturated pool.
+
+## 18. Correlation IDs come from Temporal, not a fresh UUID
+
+Derive request/log correlation from `Activity.getExecutionContext().getInfo()` — workflow ID, run ID,
+activity type — never mint a random ID per call. A freshly minted ID per call gives two activities in
+the same run unrelated IDs and no way to get from a log line back to the execution that produced it.
+Save and restore the MDC context around a call; never clear it unconditionally on the way out, or a
+nested call wipes its caller's context.
+
+## 19. Enforce workflow determinism with a build-time lint, not just review
+
+A lint (ArchUnit / forbidden-apis) over workflow packages that fails the build on
+`System.currentTimeMillis`/`Instant.now`/`LocalDate*.now`, `UUID.randomUUID`, `new Random`,
+`Thread.sleep`, `ExecutorService`, `@Autowired`/`@Value`, `@Slf4j`, and any `@Entity` type in a method
+signature costs about thirty lines and catches rule 1 and rule 9 violations mechanically, in every
+job, including the ones nobody reviews carefully.
+
+Replay tests do not substitute for this. A bad clock read changes an activity's *input payload*, and a
+replayer compares the *command sequence* — so a determinism bug from a stray `LocalDateTime.now()`
+passes a replay test clean. The two checks catch disjoint bug classes; run both.
+
+## 20. Observability budget: govern search attributes, alert on absence
+
+A MySQL-backed visibility store has a fixed, small search-attribute slot budget — not "as many custom
+attributes as jobs want." Decide the vocabulary once (`jobName`, `jobTier`, `jobOwner`, `runMode`
+covers most needs) and keep it in one shared place; a job that invents its own attribute spends a
+budget shared by every other job, and nothing recycles a spent slot.
+
+A failure-ratio alert only fires when a run happens at all. Build the absence alert too —
+an `absent_over_time`-style check over a window of roughly 2x the job's period — because a paused,
+orphaned, or wedged schedule produces zero failed executions and is invisible to every other query.
+
+## 21. Don't hardcode job-specific config, and validate it at startup
+
+Recipients, external endpoint URLs, tokens, thresholds — anything that varies per job or per
+environment — belongs in Secrets Manager or a config table, not a literal in a properties file
+committed to git. Changing a mailing list should not require a rebuild, and a literal value sits in
+git history forever.
+
+Validate required external-integration config at startup and fail construction, rather than
+discovering a placeholder value (`localhost`, an empty string, a dummy number) only when the job first
+tries to send something. An integration that's broken but rarely exercised is a trap, not a safe
+default — combined with an uncapped retry (rule 4), the first real attempt can wedge the workflow
+indefinitely.
+
+---
+
 ## Migrating a job from cron / messagingapis / tracking
 
 1. **Translate the cron.** Spring is 6-field (seconds first); Temporal is 5-field. `?` is Quartz-only
@@ -643,9 +727,3 @@ timeout — a job with no timing history cannot be tiered by anything except gue
 5. **Keep business logic out of Temporal types.** Activity is a thin adapter; the service layer
    imports nothing from `io.temporal`. That is what makes the logic testable and the job movable.
 6. **Apply rules 1–15** before opening the PR.
-
-## Known-wrong documentation
-
-`README.md` describes `TemporalConfig.java` and `TemporalWorkerConfig.java` and tells you to register
-workers there. Those files no longer exist — workers come from `@WorkflowImpl` / `@ActivityImpl`
-auto-discovery. It also claims SDK 1.22.0; the POM pins 1.31.0. Trust this file over that one.

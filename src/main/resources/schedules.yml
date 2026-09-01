@@ -20,19 +20,14 @@
 # cron is FIVE-field Temporal cron (minute hour day-of-month month day-of-week). Spring's six-field
 # format with a leading seconds field and '?' does NOT port directly — see
 # docs/temporal-migration/job-inventory.md for per-job translations of the incoming jobs.
+#
+# Entries below are kept in alphabetical order by name — position has no effect on execution
+# (that's driven by each job's own cron), it's purely for finding a job in this file quickly.
 
 scheduler:
   reconcile-on-startup: true
 
   jobs:
-
-    - name: package-expiry
-      workflow: com.yesmadam.schedulerservice.jobs.packageexpiry.workflow.PackageExpiryWorkflow
-      tier: standard
-      cron: "10 0 * * *"
-      enabled: false
-      owner: platform
-      description: Expire active package sessions and write multi-session financial reports
 
     - name: booking-monitor
       workflow: com.yesmadam.schedulerservice.jobs.bookingmonitor.workflow.BookingMonitorWorkflow
@@ -45,6 +40,41 @@ scheduler:
       enabled: false
       owner: platform
       description: Alert when Android or iOS bookings drop to zero in the trailing window
+
+    - name: order-cancellation-charge-expiry
+      workflow: com.yesmadam.schedulerservice.jobs.order.ordercancellationcharge.workflow.OrderCancellationChargeWorkflow
+      tier: light
+      cron: "30 0 * * *"        # translated from messagingapis' Spring cron "0 30 0 * * ?"
+      # A late run is still useful: missing a tick only delays expiry by a day, it does not lose or
+      # corrupt anything (the write is idempotent). Wider than the 5m default for that reason.
+      catchup-window: PT2H
+      # Tiny table (605 rows / 128 candidates measured on UAT); a wedge should fail fast under SKIP
+      # rather than hold the slot. Placeholder — revisit once a real run has been observed.
+      run-timeout: PT45M
+      enabled: false
+      owner: finance
+      description: Expire CREATED/CHARGED order cancellation charges whose expiry window has passed
+
+    - name: package-expiry
+      workflow: com.yesmadam.schedulerservice.jobs.packageexpiry.workflow.PackageExpiryWorkflow
+      tier: standard
+      cron: "10 0 * * *"
+      enabled: false
+      owner: platform
+      description: Expire active package sessions and write multi-session financial reports
+
+    - name: passbook-mismatch
+      workflow: com.yesmadam.schedulerservice.jobs.passbookmismatch.workflow.PassbookMismatchWorkflow
+      tier: standard
+      cron: "*/30 * * * *"
+      # Short catchup: a stale audit of a window that has already passed is not worth mailing.
+      catchup-window: PT5M
+      run-timeout: PT15M
+      # Mails ten people. A repeated failure should stop and be looked at rather than keep firing.
+      pause-on-failure: true
+      enabled: false
+      owner: finance
+      description: Audit SP passbook entries in the trailing window and mail mismatches
 
     - name: rose-order-eligible-sp-pool
       workflow: com.yesmadam.schedulerservice.jobs.roseorder.workflow.RoseOrderEligibleSpPoolWorkflow
@@ -68,16 +98,3 @@ scheduler:
       enabled: false
       owner: platform
       description: Update SEBAL sub-category SP tags
-
-    - name: passbook-mismatch
-      workflow: com.yesmadam.schedulerservice.jobs.passbookmismatch.workflow.PassbookMismatchWorkflow
-      tier: standard
-      cron: "*/30 * * * *"
-      # Short catchup: a stale audit of a window that has already passed is not worth mailing.
-      catchup-window: PT5M
-      run-timeout: PT15M
-      # Mails ten people. A repeated failure should stop and be looked at rather than keep firing.
-      pause-on-failure: true
-      enabled: false
-      owner: finance
-      description: Audit SP passbook entries in the trailing window and mail mismatches
