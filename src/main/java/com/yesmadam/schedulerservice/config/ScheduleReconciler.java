@@ -28,8 +28,8 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>Without this the service can only create schedules that do not yet exist, so configuration
  * describes what was true on the day a schedule was first registered. Changing a cron, moving a job
- * to a different task queue, or adding an overlap policy has no effect on anything already running —
- * and the log says "already exists", which reads like success.
+ * to a different task queue, or adding an overlap policy has no effect on anything already running
+ * — and the log says "already exists", which reads like success.
  *
  * <p>Three deliberate choices about what this does <em>not</em> do:
  *
@@ -93,8 +93,9 @@ public class ScheduleReconciler {
       // Almost always means schedules.yml did not load — a profile whose spring.config.import
       // omits it, or a renamed file. Nothing is scheduled, and the service otherwise looks healthy,
       // so this is logged at error rather than left as a quiet warning.
-      log.error("event=schedule_registration_empty reason=no_jobs_declared "
-          + "check=spring.config.import_includes_schedules.yml");
+      log.error(
+          "event=schedule_registration_empty reason=no_jobs_declared "
+              + "check=spring.config.import_includes_schedules.yml");
       LoggingUtils.logAuditEvent(
           "SCHEDULE_CONFIG_EMPTY", "REGISTRAR", "schedules.yml declared no jobs");
       return;
@@ -179,7 +180,8 @@ public class ScheduleReconciler {
       // Pointing at the impl instead of the interface resolves fine and fails much later inside
       // setWorkflowType, where the message says nothing about which job caused it.
       problems.add(
-          "'workflow' must be the @WorkflowInterface, not an implementation — " + job.getWorkflow());
+          "'workflow' must be the @WorkflowInterface, not an implementation — "
+              + job.getWorkflow());
     }
 
     return problems;
@@ -244,8 +246,7 @@ public class ScheduleReconciler {
    * mistake than an intentional decommission, and the cost of the two errors is not symmetric.
    */
   private void reportOrphans(List<JobDefinition> jobs) {
-    Set<String> declared =
-        jobs.stream().map(JobDefinition::scheduleId).collect(Collectors.toSet());
+    Set<String> declared = jobs.stream().map(JobDefinition::scheduleId).collect(Collectors.toSet());
 
     try (var stream = scheduleClient.listSchedules()) {
       List<String> orphans =

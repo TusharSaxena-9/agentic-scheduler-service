@@ -11,12 +11,12 @@ import lombok.Setter;
  *
  * <p>Everything about when a job runs lives here rather than being spread across a
  * {@code @Configuration} class, a properties key and an annotation. At a hundred jobs that matters
- * for a specific reason: "what runs at midnight, and who owns it" needs one answer, and today it has
- * three sources.
+ * for a specific reason: "what runs at midnight, and who owns it" needs one answer, and today it
+ * has three sources.
  *
- * <p>Optional policy fields left null inherit the service-wide defaults applied by
- * {@link TemporalScheduleRegistrar}. Inheriting is fine; inheriting without having considered it is
- * what rule 5 in {@code CLAUDE.md} is about.
+ * <p>Optional policy fields left null inherit the service-wide defaults applied by {@link
+ * TemporalScheduleRegistrar}. Inheriting is fine; inheriting without having considered it is what
+ * rule 5 in {@code CLAUDE.md} is about.
  */
 @Getter
 @Setter

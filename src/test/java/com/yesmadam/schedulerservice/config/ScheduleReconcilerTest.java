@@ -68,8 +68,7 @@ class ScheduleReconcilerTest {
   }
 
   private List<CronScheduleRequest> registeredRequests() {
-    ArgumentCaptor<CronScheduleRequest> captor =
-        ArgumentCaptor.forClass(CronScheduleRequest.class);
+    ArgumentCaptor<CronScheduleRequest> captor = ArgumentCaptor.forClass(CronScheduleRequest.class);
     verify(registrar, times(registrationCount())).createIfAbsent(captor.capture());
     return captor.getAllValues();
   }

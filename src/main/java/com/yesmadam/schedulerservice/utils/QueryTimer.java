@@ -8,8 +8,9 @@ import java.util.function.Supplier;
 /**
  * Times a batch of per-chunk DAO calls and records each one's row count, keyed by query name.
  * Shared across jobs — Rose Order's SP-eligibility queries return {@code Map<Integer, V>}, SEBAL
- * tagging's cohort queries return {@code List<V>}; both are just "how long did this take and how
- * many rows came back," so one class covers both shapes via overloads.
+ * tagging's cohort queries return {@code List<V>}, auto-assign's reassign rollup returns
+ * {@code Map<Long, Integer>}; all of them are just "how long did this take and how many rows came
+ * back," so one class covers every shape via two key-agnostic overloads.
  *
  * <p>Create a fresh instance per chunk processed — never share one across chunks/threads. Both
  * {@code RoseOrderServiceImpl} and {@code SebalTaggingServiceImpl} are singleton Spring beans and
@@ -25,9 +26,9 @@ public class QueryTimer {
    * Runs {@code query}, records how long it took and how many rows it returned under {@code
    * queryName}, and returns the result.
    */
-  public <V> Map<Integer, V> time(String queryName, Supplier<Map<Integer, V>> query) {
+  public <K, V> Map<K, V> time(String queryName, Supplier<Map<K, V>> query) {
     long start = System.currentTimeMillis();
-    Map<Integer, V> result = query.get();
+    Map<K, V> result = query.get();
     durationsMs.put(queryName, System.currentTimeMillis() - start);
     rowCounts.put(queryName, result.size());
     return result;

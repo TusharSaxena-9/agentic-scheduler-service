@@ -95,5 +95,4 @@ class TemporalScheduleRegistrarTest {
             TemporalScheduleRegistrar.MANAGED_BY_MEMO_VALUE);
     verify(handle, never()).update(any());
   }
-
 }

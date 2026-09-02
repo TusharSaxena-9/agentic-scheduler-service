@@ -19,11 +19,12 @@ import io.temporal.spring.boot.autoconfigure.properties.WorkerProperties;
 /**
  * Binds {@code spring.temporal.workers[*]} exactly as Spring would and checks the result.
  *
- * <p>This exists because the failure mode is silence. A misspelled key under {@code capacity.*} does
- * not fail to start — it simply never binds, the worker is created on SDK defaults of 200 activity
- * slots, and the first symptom is a shared database taking load nobody intended. The same is true if
- * a worker block is dropped entirely: the task queue is still referenced by an annotation, so the
- * starter creates a worker for it with default configuration rather than complaining.
+ * <p>This exists because the failure mode is silence. A misspelled key under {@code capacity.*}
+ * does not fail to start — it simply never binds, the worker is created on SDK defaults of 200
+ * activity slots, and the first symptom is a shared database taking load nobody intended. The same
+ * is true if a worker block is dropped entirely: the task queue is still referenced by an
+ * annotation, so the starter creates a worker for it with default configuration rather than
+ * complaining.
  *
  * <p>It also pins the task queue placeholders. Declaring the queue name literally here would let a
  * rename in {@code temporal.taskqueue.*} leave capacity attached to a queue no worker polls.
@@ -117,9 +118,7 @@ class WorkerCapacityConfigTest {
   @DisplayName("total activity executors per pod stay within reach of the writer pool")
   void totalActivityExecutorsAreBounded() {
     int total =
-        workers.stream()
-            .mapToInt(w -> w.getCapacity().getMaxConcurrentActivityExecutors())
-            .sum();
+        workers.stream().mapToInt(w -> w.getCapacity().getMaxConcurrentActivityExecutors()).sum();
 
     // 4 workers on SDK defaults would be 800. The ceiling here is a deliberate figure, not an
     // accident — if it grows, the shared database budget has to grow with it.

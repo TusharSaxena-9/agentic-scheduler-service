@@ -34,11 +34,12 @@ import lombok.extern.slf4j.Slf4j;
  * workload than a fleet of database-heavy periodic jobs — notably a one-year catchup window, which
  * turns a recovered outage into a stampede.
  *
- * <p>{@link #createIfAbsent} is create-only. It does not update a schedule that already exists, which
- * means configuration describes what a schedule looked like when it was first registered rather than
- * what it looks like now. That is deliberate: an in-place update would also overwrite paused state,
- * and a job paused during an incident must stay paused across the next deploy. The cost is that
- * applying a config change is a manual delete in the Temporal UI followed by a restart.
+ * <p>{@link #createIfAbsent} is create-only. It does not update a schedule that already exists,
+ * which means configuration describes what a schedule looked like when it was first registered
+ * rather than what it looks like now. That is deliberate: an in-place update would also overwrite
+ * paused state, and a job paused during an incident must stay paused across the next deploy. The
+ * cost is that applying a config change is a manual delete in the Temporal UI followed by a
+ * restart.
  */
 @Slf4j
 @Component
@@ -106,7 +107,8 @@ public class TemporalScheduleRegistrar {
       LoggingUtils.logAuditEvent(
           "SCHEDULE_CREATED",
           scheduleId,
-          String.format("%s cron=%s", describe(request, createPaused), request.getCronExpression()));
+          String.format(
+              "%s cron=%s", describe(request, createPaused), request.getCronExpression()));
 
     } catch (ScheduleAlreadyRunningException ex) {
       log.info(
@@ -140,9 +142,9 @@ public class TemporalScheduleRegistrar {
   /**
    * Builds the schedule, filling any policy the request left unset from the service-wide defaults.
    *
-   * <p>The paused flag is set on {@link ScheduleState} here rather than by a follow-up
-   * {@code pause()} call, which would be a second RPC with a window in which a dying pod leaves a
-   * schedule running that was meant to be paused.
+   * <p>The paused flag is set on {@link ScheduleState} here rather than by a follow-up {@code
+   * pause()} call, which would be a second RPC with a window in which a dying pod leaves a schedule
+   * running that was meant to be paused.
    */
   private Schedule buildSchedule(CronScheduleRequest request, boolean paused) {
     ScheduleSpec spec =
@@ -176,7 +178,8 @@ public class TemporalScheduleRegistrar {
                     WorkflowOptions.newBuilder()
                         .setTaskQueue(request.getTaskQueue())
                         .setWorkflowId(request.getWorkflowId())
-                        .setWorkflowRunTimeout(orDefault(request.getRunTimeout(), defaultRunTimeout))
+                        .setWorkflowRunTimeout(
+                            orDefault(request.getRunTimeout(), defaultRunTimeout))
                         .build())
                 .build())
         .build();

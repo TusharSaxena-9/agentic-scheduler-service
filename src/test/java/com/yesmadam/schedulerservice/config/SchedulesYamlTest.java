@@ -23,10 +23,10 @@ import org.springframework.core.io.ClassPathResource;
  *
  * <p>Two failure modes here are silent rather than loud, which is why they are worth a test.
  *
- * <p>A misspelled property key does not fail — relaxed binding simply leaves the field null, and the
- * job quietly inherits a default instead of the policy someone wrote down. And a schedule ID that
- * does not match the one already live in Temporal does not fail either: the reconciler creates a
- * second schedule alongside the original, so the job runs twice and the old schedule becomes an
+ * <p>A misspelled property key does not fail — relaxed binding simply leaves the field null, and
+ * the job quietly inherits a default instead of the policy someone wrote down. And a schedule ID
+ * that does not match the one already live in Temporal does not fail either: the reconciler creates
+ * a second schedule alongside the original, so the job runs twice and the old schedule becomes an
  * orphan nobody is looking for.
  */
 class SchedulesYamlTest {
@@ -51,13 +51,15 @@ class SchedulesYamlTest {
   void allJobsBind() {
     assertThat(properties.getJobs()).isNotEmpty();
     assertThat(properties.isReconcileOnStartup()).isTrue();
-    assertThat(properties.getJobs()).allSatisfy(job -> {
-      assertThat(job.getName()).isNotBlank();
-      assertThat(job.getCron()).isNotBlank();
-      assertThat(job.getTier()).isNotNull();
-      assertThat(job.getWorkflow()).isNotBlank();
-      assertThat(job.getOwner()).isNotBlank();
-    });
+    assertThat(properties.getJobs())
+        .allSatisfy(
+            job -> {
+              assertThat(job.getName()).isNotBlank();
+              assertThat(job.getCron()).isNotBlank();
+              assertThat(job.getTier()).isNotNull();
+              assertThat(job.getWorkflow()).isNotBlank();
+              assertThat(job.getOwner()).isNotBlank();
+            });
   }
 
   @Test
@@ -119,8 +121,7 @@ class SchedulesYamlTest {
             "scheduler.jobs[0].tier", "gigantic");
     environment.getPropertySources().addLast(new MapPropertySource("bad", bad));
 
-    assertThatThrownBy(
-            () -> Binder.get(environment).bind("scheduler", JobScheduleProperties.class))
+    assertThatThrownBy(() -> Binder.get(environment).bind("scheduler", JobScheduleProperties.class))
         .isInstanceOf(BindException.class);
   }
 

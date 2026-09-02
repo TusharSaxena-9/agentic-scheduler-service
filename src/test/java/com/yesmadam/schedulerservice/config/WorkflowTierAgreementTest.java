@@ -76,7 +76,9 @@ class WorkflowTierAgreementTest {
   @DisplayName("the scan found the workflow implementations it was looking for")
   void implementationsWereFound() {
     assertThat(queueByWorkflowInterface)
-        .as("no @WorkflowImpl classes found under %s — this test would pass vacuously", JOBS_PACKAGE)
+        .as(
+            "no @WorkflowImpl classes found under %s — this test would pass vacuously",
+            JOBS_PACKAGE)
         .isNotEmpty();
   }
 

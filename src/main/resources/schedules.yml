@@ -28,6 +28,36 @@ scheduler:
   reconcile-on-startup: true
 
   jobs:
+    - name: auto-assign
+      workflow: com.yesmadam.schedulerservice.jobs.autoassign.workflow.AutoAssignWorkflow
+      tier: standard
+      cron: "*/5 0-21 * * *"
+      jitter: PT0S
+      run-timeout: PT15M
+      enabled: false
+      owner: platform
+      description: Auto-assign today's unassigned orders, and queue the rest for distribution
+
+    - name: auto-assign-tomorrow
+      workflow: com.yesmadam.schedulerservice.jobs.autoassign.workflow.AutoAssignTomorrowWorkflow
+      tier: standard
+      cron: "*/5 16-23 * * *"
+      jitter: PT0S
+      run-timeout: PT15M
+      enabled: false
+      owner: platform
+      description: Auto-assign tomorrow's unassigned orders; the only producer of D-1 distribution candidates
+
+    - name: auto-job-distribution
+      workflow: com.yesmadam.schedulerservice.jobs.autoJobDistribution.workflow.AutoJobDistributionWorkflow
+      tier: light
+      cron: "*/5 6-23 * * *"
+      jitter: PT0S
+      run-timeout: PT6M
+      pause-on-failure: false
+      enabled: false
+      owner: platform
+      description: Advance, close or escalate live job distribution rounds, then fire at most one queued order
 
     - name: booking-monitor
       workflow: com.yesmadam.schedulerservice.jobs.bookingmonitor.workflow.BookingMonitorWorkflow
@@ -98,6 +128,16 @@ scheduler:
       enabled: false
       owner: platform
       description: Update SEBAL sub-category SP tags
+
+    - name: sp-not-reached-home
+      workflow: com.yesmadam.schedulerservice.jobs.spNotReachedHome.workflow.SpNotReachedHomeWorkflow
+      tier: light
+      cron: "*/5 20-23 * * *"
+      jitter: PT0S
+      run-timeout: PT8M
+      enabled: false
+      owner: platform
+      description: Track SPs who finished after 8 PM and have not returned within 300m of home
 
     - name: user-wallet-sum
       workflow: com.yesmadam.schedulerservice.jobs.userwalletsum.workflow.UserWalletSumWorkflow

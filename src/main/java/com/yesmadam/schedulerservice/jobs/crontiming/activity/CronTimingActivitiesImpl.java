@@ -26,7 +26,7 @@ import lombok.extern.slf4j.Slf4j;
     taskQueues = {
       "${temporal.taskqueue.light}",
       "${temporal.taskqueue.standard}",
-      "${temporal.taskqueue.heavy}"
+      "${temporal.taskqueue.heavy}",
     })
 public class CronTimingActivitiesImpl implements CronTimingActivities {
 
