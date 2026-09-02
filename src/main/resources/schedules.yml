@@ -98,3 +98,21 @@ scheduler:
       enabled: false
       owner: platform
       description: Update SEBAL sub-category SP tags
+
+    - name: user-wallet-sum
+      workflow: com.yesmadam.schedulerservice.jobs.userwalletsum.workflow.UserWalletSumWorkflow
+      # Unmeasured — a single unfiltered full-table SUM over tbl_user, not chunked. Standard rather
+      # than light because the table is not known to be small (unlike order-cancellation-charge's
+      # measured 605 rows); revisit both this and run-timeout once a real duration is observed.
+      tier: standard
+      cron: "0 0 * * *"        # translated from messagingapis' Spring cron "0 0 0 * * ?"
+      # A late run still produces a useful snapshot — it is "as of now", not a specific historical
+      # window — so a missed midnight tick is worth catching up on rather than skipping.
+      catchup-window: PT2H
+      run-timeout: PT30M
+      # Feeds a finance-facing balance snapshot; a repeated failure should stop and be looked at
+      # rather than keep silently skipping under the default SKIP overlap policy.
+      pause-on-failure: true
+      enabled: false
+      owner: finance
+      description: Sum all user wallet balances and snapshot the total daily
