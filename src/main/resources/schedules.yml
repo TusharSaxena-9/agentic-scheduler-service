@@ -106,6 +106,24 @@ scheduler:
       owner: finance
       description: Audit SP passbook entries in the trailing window and mail mismatches
 
+    - name: product-hub-live-stock-alert
+      workflow: com.yesmadam.schedulerservice.jobs.producthublivestock.workflow.ProductHubLiveStockAlertWorkflow
+      tier: standard
+      cron: "0 10,14,18 * * *"  # 10:00, 14:00, 18:00 daily (Asia/Kolkata, via schedule.defaults.time-zone)
+      # Ops wants alerts at these exact times, not spread across a window.
+      jitter: PT0S
+      # A stock alert for a run that fired hours late isn't worth sending.
+      catchup-window: PT10M
+      run-timeout: PT10M
+      # Mails and WhatsApps real people. A repeated failure should stop and be looked at rather
+      # than keep firing.
+      pause-on-failure: true
+      # Depends on PRODUCT_HUB_LIVE_STOCK_ALERT_HUB_IDS / _PRODUCT_IDS rows in tbl_settings —
+      # flip on once those are populated.
+      enabled: false
+      owner: platform
+      description: Alert by mail and WhatsApp when configured hub/product live stock drops to zero
+
     - name: rose-order-eligible-sp-pool
       workflow: com.yesmadam.schedulerservice.jobs.roseorder.workflow.RoseOrderEligibleSpPoolWorkflow
       tier: heavy

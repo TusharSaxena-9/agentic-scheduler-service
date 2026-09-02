@@ -1,6 +1,8 @@
 package com.yesmadam.schedulerservice.utils;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import com.yesmadam.persistence.SettingsForEnalbeDisable;
@@ -69,5 +71,31 @@ public final class SettingConfigUtil {
       return defaultValue;
     }
     return setting.getValue().trim();
+  }
+
+  /**
+   * Reads a comma-separated list of ints, e.g. {@code "12, 45,7"}. Missing/blank rows and blank
+   * tokens (a stray trailing comma) return an empty list rather than a default — callers treat "not
+   * configured" the same as "configured empty". A non-numeric token is logged and dropped rather
+   * than failing the whole list, so one bad entry doesn't take out every id in the row.
+   */
+  public static List<Integer> intListConfig(Map<String, SettingsForEnalbeDisable> cfg, String key) {
+    String raw = stringConfig(cfg, key, null);
+    if (raw == null) {
+      return List.of();
+    }
+    List<Integer> ids = new ArrayList<>();
+    for (String token : raw.split(",")) {
+      String trimmed = token.trim();
+      if (trimmed.isEmpty()) {
+        continue;
+      }
+      try {
+        ids.add(Integer.parseInt(trimmed));
+      } catch (NumberFormatException e) {
+        log.error("Invalid id '{}' in config {} = '{}', dropping it", trimmed, key, raw);
+      }
+    }
+    return ids;
   }
 }
