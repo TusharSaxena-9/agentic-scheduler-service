@@ -51,8 +51,11 @@ class AutoAssignServiceImplTest {
 
   private static final long ORDER_ID = 4242L;
 
-  /** Reassign threshold 2, priority window 60 min, min lead time 60 min — the shipped defaults. */
-  private static final AutoAssignThresholds DEFAULTS = new AutoAssignThresholds(2, 60, 60);
+  /**
+   * Reassign threshold 2, priority window 60 min, min lead time 60 min, express start threshold 45
+   * min, express age lookback 15 min — the shipped defaults.
+   */
+  private static final AutoAssignThresholds DEFAULTS = new AutoAssignThresholds(2, 60, 60, 45, 15);
 
   @Mock AutoAssignOrderReader reader;
   @Mock SettingService settingService;
@@ -76,6 +79,15 @@ class AutoAssignServiceImplTest {
   /** A candidate whose slot starts {@code minutes} from now. */
   private static AutoAssignCandidate candidate(long minutes) {
     return new AutoAssignCandidate(ORDER_ID, System.currentTimeMillis() + minutes * 60_000L);
+  }
+
+  /** An express-flagged candidate whose slot starts {@code startMinutes} from now. */
+  private static AutoAssignCandidate expressCandidate(long startMinutes, long createdMinutesAgo) {
+    return new AutoAssignCandidate(
+        ORDER_ID,
+        System.currentTimeMillis() + startMinutes * 60_000L,
+        true,
+        System.currentTimeMillis() - createdMinutesAgo * 60_000L);
   }
 
   /** Same-day run — the default for the gate tests below. */
@@ -303,6 +315,97 @@ class AutoAssignServiceImplTest {
     when(reader.findSpRejectedAfterCutoff(anyList(), any())).thenReturn(List.of(ORDER_ID));
 
     assertThat(process(candidate(600)).count(AutoAssignOutcome.ASSIGN_TRIGGERED)).isEqualTo(1);
+  }
+
+  // ================================================================
+  // Express last-resort bypass: SAME_DAY only, independent of the other three terms
+  // ================================================================
+
+  @Test
+  @DisplayName("SAME_DAY: a fresh express order about to start bypasses every other check")
+  void expressLastResortBypassesEveryOtherCheck() {
+    // Reassign count over the threshold AND already accepted-then-cancelled: either alone would
+    // normally divert the order. The express bypass must fire anyway — it is a last resort, not an
+    // additional condition on top of the normal gate.
+    when(reader.findReassignCounts(anyList())).thenReturn(Map.of(ORDER_ID, 99));
+    when(reader.findAcceptedDistributionOrderIds(anyList())).thenReturn(List.of(ORDER_ID));
+
+    AutoAssignChunkResult result = process(expressCandidate(10, 5));
+
+    assertThat(result.count(AutoAssignOutcome.ASSIGN_TRIGGERED)).isEqualTo(1);
+    assertThat(result.getDistributionOrderIds()).isEmpty();
+    verify(apiClient).triggerAssign(ORDER_ID);
+  }
+
+  @Test
+  @DisplayName("SAME_DAY: an express order created too long ago does not get the bypass")
+  void expressButStaleIsDiverted() {
+    AutoAssignChunkResult result = process(expressCandidate(10, 20));
+
+    assertThat(result.getDistributionOrderIds()).containsExactly(ORDER_ID);
+    verify(apiClient, never()).triggerAssign(anyLong());
+  }
+
+  @Test
+  @DisplayName("SAME_DAY: an express order 45-60 minutes out gets neither gate term")
+  void expressNotCloseEnoughIsDiverted() {
+    // Inside the normal 60-minute priority window (so safeToReassign fails) but not yet inside the
+    // 45-minute express window (so expressLastResort fails too).
+    AutoAssignChunkResult result = process(expressCandidate(50, 5));
+
+    assertThat(result.getDistributionOrderIds()).containsExactly(ORDER_ID);
+  }
+
+  @Test
+  @DisplayName("SAME_DAY: at the 45-minute express threshold the bypass does not apply")
+  void expressAtStartBoundaryIsDiverted() {
+    // Mirrors atPriorityThresholdIsAssigned's slack: constructing at exactly 45 and reading it a
+    // few ms later could truncate to 44 minutes, which would wrongly land inside the bypass. 46
+    // safely stays at-or-above 45 after that drift, so the strict `<` comparison still reads false.
+    AutoAssignChunkResult result = process(expressCandidate(46, 5));
+
+    assertThat(result.getDistributionOrderIds()).containsExactly(ORDER_ID);
+  }
+
+  @Test
+  @DisplayName("SAME_DAY: at the 15-minute express age lookback the bypass does not apply")
+  void expressAtAgeBoundaryIsDiverted() {
+    AutoAssignChunkResult result = process(expressCandidate(10, 16));
+
+    assertThat(result.getDistributionOrderIds()).containsExactly(ORDER_ID);
+  }
+
+  @Test
+  @DisplayName("SAME_DAY: a non-express order in the express window is still diverted")
+  void nonExpressOrderGetsNoBypass() {
+    // Same timing as expressLastResortBypassesEveryOtherCheck, but expressJob=false — a regression
+    // guard that the new term does not leak into ordinary orders.
+    AutoAssignChunkResult result = process(candidate(10));
+
+    assertThat(result.getDistributionOrderIds()).containsExactly(ORDER_ID);
+    verify(apiClient, never()).triggerAssign(anyLong());
+  }
+
+  @Test
+  @DisplayName("SAME_DAY: an express order with unresolved creation time does not get the bypass")
+  void expressWithUnknownCreatedAtFailsClosed() {
+    // createdAtMillis null reads as "created infinitely long ago" -- fails the express check
+    // closed, the opposite direction from how an unresolved slot start fails the normal check open.
+    AutoAssignCandidate unresolvedCreatedAt =
+        new AutoAssignCandidate(ORDER_ID, System.currentTimeMillis() + 10 * 60_000L, true, null);
+
+    AutoAssignChunkResult result = process(unresolvedCreatedAt);
+
+    assertThat(result.getDistributionOrderIds()).containsExactly(ORDER_ID);
+  }
+
+  @Test
+  @DisplayName("NEXT_DAY: the express bypass never applies, even to a fresh about-to-start order")
+  void nextDayNeverAppliesExpressBypass() {
+    AutoAssignChunkResult result = processNextDay(expressCandidate(10, 5));
+
+    assertThat(result.getDistributionOrderIds()).containsExactly(ORDER_ID);
+    verify(apiClient, never()).triggerAssign(anyLong());
   }
 
   // ================================================================

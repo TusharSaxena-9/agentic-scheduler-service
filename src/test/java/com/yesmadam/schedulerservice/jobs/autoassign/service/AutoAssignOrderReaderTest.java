@@ -155,6 +155,16 @@ class AutoAssignOrderReaderTest {
       public String getBookingTime() {
         return slot;
       }
+
+      @Override
+      public Boolean getIsExpressJob() {
+        return null; // this query never selects it -- see the interface javadoc
+      }
+
+      @Override
+      public Timestamp getCreatedAt() {
+        return null; // this query never selects it -- see the interface javadoc
+      }
     };
   }
 

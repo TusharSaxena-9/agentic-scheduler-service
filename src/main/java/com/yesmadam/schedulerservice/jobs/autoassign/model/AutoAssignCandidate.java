@@ -29,4 +29,20 @@ public class AutoAssignCandidate {
    * never blocks auto-assign — the cron's parse-failure-is-safe behaviour.
    */
   private Long startTimeMillis;
+
+  /** {@code tbl_order.is_express_job}, resolved to a non-null primitive at the fetch. */
+  private boolean expressJob;
+
+  /**
+   * Epoch-millis of {@code tbl_order.created_at}, or {@code null} when unresolved. Unlike {@link
+   * #startTimeMillis}, unknown here is treated as "created infinitely long ago" — it must fail the
+   * express last-resort check closed, not open, so unresolved data can never unlock a bypass that
+   * exists specifically for an order just placed.
+   */
+  private Long createdAtMillis;
+
+  /** Pre-express-carve-out shape: not an express order, creation time not tracked. */
+  public AutoAssignCandidate(Long orderId, Long startTimeMillis) {
+    this(orderId, startTimeMillis, false, null);
+  }
 }

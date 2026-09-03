@@ -24,4 +24,13 @@ public class AutoAssignThresholds {
 
   /** Minimum minutes-to-start required for an order to be a candidate at all. */
   private int minLeadTimeMinutes;
+
+  /**
+   * Minutes-to-start below which a fresh, express order may still be auto-assigned as a last
+   * resort, bypassing every other check.
+   */
+  private int expressMinMinutesBeforeStart;
+
+  /** How recently, in minutes, an express order must have been created for that bypass to apply. */
+  private int expressOrderAgeLookbackMinutes;
 }

@@ -27,17 +27,27 @@ import com.yesmadam.schedulerservice.jobs.autoassign.projections.UnassignedOrder
 public interface AutoAssignOrderRepository extends JpaRepository<Order, Long> {
 
   /**
-   * Unassigned orders on one booking date that still have enough runway to be worth auto-assigning.
+   * Unassigned orders on one booking date that either still have enough runway to be worth
+   * auto-assigning, or are flagged express and may still be picked up as a last resort close to (or
+   * past) their start — see {@code AutoAssignServiceImpl#shouldAutoAssign}.
    *
    * <p>Ported from cron's {@code OrderDaoImpl#getOrdersByBookingDateWithNonAssigning}: no SP
    * assigned, not deliberately pulled out of the pool by ops via {@code
-   * unassignWithRemoveReassigning}, and starting at least {@code minStartTime} from now.
+   * unassignWithRemoveReassigning}, and either starting at least {@code minStartTime} from now or
+   * flagged {@code is_express_job}. The express branch has no lower bound on its own — even an
+   * overdue, still-unassigned express order matches here; the gate decides separately whether it is
+   * still within the express last-resort window, mirroring cron's {@code expressLastResort} term,
+   * which uses a strict {@code <} comparison with no floor either.
    *
    * <p><b>Access path:</b> {@code idx_order_booking_sp_servicetype_status (booking_date,
-   * s_p_assign_by_user, is_servicetype, order_status_code)}. Verified on UAT: {@code type=ref,
-   * key=idx_order_booking_sp_servicetype_status, Using index condition; Using where}. The leading
-   * two columns match this query's {@code booking_date = ?} and {@code s_p_assign_by_user IS NULL}
-   * exactly, which is why it is a ref lookup rather than a scan of the day.
+   * s_p_assign_by_user, is_servicetype, order_status_code)}. Verified on UAT prior to the express
+   * carve-out: {@code type=ref, key=idx_order_booking_sp_servicetype_status, Using index condition;
+   * Using where}. The leading two columns match this query's {@code booking_date = ?} and {@code
+   * s_p_assign_by_user IS NULL} exactly. Neither {@code order_start_time_with_date} nor {@code
+   * is_express_job} is part of this index — both were already applied as a post-index filter before
+   * this change, so wrapping them in an {@code OR} should not change which index is chosen, but
+   * re-run {@code EXPLAIN} after this lands and fold the result into this note; rule 15 requires the
+   * access-path claim to stay current, not just plausible.
    *
    * <p>{@code booking_date} is a {@code datetime}, not a {@code date}, so the equality only matches
    * rows stored at midnight. Every row sampled on UAT is, and this mirrors cron's own Criteria
@@ -46,18 +56,20 @@ public interface AutoAssignOrderRepository extends JpaRepository<Order, Long> {
    *
    * @param statusCodes order statuses in scope (new request / assigned-to-SP)
    * @param bookingDate the booking date to scan
-   * @param minStartTime earliest slot start still considered actionable
+   * @param minStartTime earliest slot start still considered actionable for a non-express order
    */
   @Query(
       value =
           """
     select o.order_id     as orderId,
            cast(o.booking_date as date) as bookingDate,
-           o.booking_time as bookingTime
+           o.booking_time as bookingTime,
+           o.is_express_job as isExpressJob,
+           o.created_at   as createdAt
     from ysmdm_users.tbl_order o
     where o.order_status_code in (:statusCodes)
       and o.booking_date = :bookingDate
-      and o.order_start_time_with_date >= :minStartTime
+      and (o.order_start_time_with_date >= :minStartTime or o.is_express_job = true)
       and o.s_p_assign_by_user is null
       and (o.unassignWithRemoveReassigning is null or o.unassignWithRemoveReassigning = false)
     """,

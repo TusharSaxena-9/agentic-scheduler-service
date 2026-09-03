@@ -55,7 +55,7 @@ class AutoAssignTomorrowWorkflowImplTest {
     public AutoAssignRunContext fetchAutoAssignRunContext(AutoAssignScope scope) {
       scopesSeen.add(scope);
       return new AutoAssignRunContext(
-          "2026-09-02", candidates, new AutoAssignThresholds(2, 60, 60), scope);
+          "2026-09-02", candidates, new AutoAssignThresholds(2, 60, 60, 45, 15), scope);
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.yesmadam.schedulerservice.jobs.autoassign.service;
 
+import static com.yesmadam.schedulerservice.jobs.autoassign.enums.AutoAssignConfig.EXPRESS_MIN_MINUTES_BEFORE_START;
+import static com.yesmadam.schedulerservice.jobs.autoassign.enums.AutoAssignConfig.EXPRESS_ORDER_AGE_LOOKBACK_MINUTES;
 import static com.yesmadam.schedulerservice.jobs.autoassign.enums.AutoAssignConfig.MIN_LEAD_TIME_MINUTES;
 import static com.yesmadam.schedulerservice.jobs.autoassign.enums.AutoAssignConfig.PRIORITY_TIME_THRESHOLD_MINUTES;
 import static com.yesmadam.schedulerservice.jobs.autoassign.enums.AutoAssignConfig.REASSIGN_THRESHOLD;
@@ -45,7 +47,9 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>Same decision, same order: an unassigned same-day order is auto-assigned while no SP has ever
  * accepted-then-cancelled it, its reassign attempts are still under the threshold, and it is not
- * about to start. Anything failing one of those goes to Auto Job Distribution instead.
+ * about to start. Anything failing one of those goes to Auto Job Distribution instead — except a
+ * fresh, express-flagged order about to start, which bypasses those checks as a last resort. See
+ * {@link #shouldAutoAssign}.
  *
  * <p>That handoff used to be an HTTP POST to cron. The distribution engine now lives in this
  * service, so it is a direct call to {@link AutoJobDistributionService#triggerDistributionBatch} —
@@ -68,6 +72,14 @@ public class AutoAssignServiceImpl implements AutoAssignService {
    * force-queued for distribution on a parse error — the cron's parse-failure-is-safe behaviour.
    */
   private static final long UNKNOWN_MINUTES_UNTIL_START = Long.MAX_VALUE;
+
+  /**
+   * Treated as the minutes-since-created of an order whose {@code created_at} could not be
+   * resolved. Unlike {@link #UNKNOWN_MINUTES_UNTIL_START}, this fails its check closed rather than
+   * open: unknown creation time must never unlock the express last-resort bypass, so "infinitely
+   * long ago" is deliberately the unsafe direction here, not the safe one.
+   */
+  private static final long UNKNOWN_MINUTES_SINCE_CREATED = Long.MAX_VALUE;
 
   private final AutoAssignOrderReader autoAssignOrderReader;
   private final SettingService settingService;
@@ -94,7 +106,9 @@ public class AutoAssignServiceImpl implements AutoAssignService {
         new AutoAssignThresholds(
             REASSIGN_THRESHOLD.intValue(config),
             PRIORITY_TIME_THRESHOLD_MINUTES.intValue(config),
-            MIN_LEAD_TIME_MINUTES.intValue(config));
+            MIN_LEAD_TIME_MINUTES.intValue(config),
+            EXPRESS_MIN_MINUTES_BEFORE_START.intValue(config),
+            EXPRESS_ORDER_AGE_LOOKBACK_MINUTES.intValue(config));
 
     LocalDate bookingDate = LocalDate.now().plusDays(scope.getDayOffset());
     Timestamp minStartTime =
@@ -111,7 +125,9 @@ public class AutoAssignServiceImpl implements AutoAssignService {
                     new AutoAssignCandidate(
                         row.getOrderId(),
                         BookingSlotTimeUtil.startTimeMillis(
-                            row.getBookingDate(), row.getBookingTime())))
+                            row.getBookingDate(), row.getBookingTime()),
+                        Boolean.TRUE.equals(row.getIsExpressJob()),
+                        row.getCreatedAt() == null ? null : row.getCreatedAt().getTime()))
             .collect(Collectors.toList());
 
     log.info(
@@ -183,7 +199,8 @@ public class AutoAssignServiceImpl implements AutoAssignService {
           acceptedThenCancelled,
           spRejectedAfterCutoff,
           thresholds,
-          freshStartMillis)) {
+          freshStartMillis,
+          scope)) {
         boolean accepted = autoAssignApiClient.triggerAssign(orderId);
         record(
             outcomeCounts,
@@ -226,14 +243,27 @@ public class AutoAssignServiceImpl implements AutoAssignService {
   }
 
   /**
-   * The auto-assign gate, unchanged from the cron: keep auto-assigning only while no SP has
-   * accepted-then-cancelled the order, no SP rejected it after today's cutoff (D-1 only), its
-   * reassign attempts are still under the threshold, and its slot is not inside the priority
-   * window.
+   * The auto-assign gate. An order is auto-assigned when either term below holds:
+   *
+   * <ul>
+   *   <li>{@code safeToReassign} — unchanged from the original port: no SP has
+   *       accepted-then-cancelled the order, no SP rejected it after today's cutoff (D-1 only), its
+   *       reassign attempts are still under the threshold, and its slot is not inside the priority
+   *       window.
+   *   <li>{@code expressLastResort} — {@link AutoAssignScope#SAME_DAY} only: the order is flagged
+   *       {@code is_express_job}, about to start, and was created recently. This term was missing
+   *       entirely from the original port; {@code AutoAssignOrderRepository
+   *       #findUnassignedOrdersForBookingDate} had to change alongside it, since its old lead-time
+   *       floor excluded these orders from the candidate list before this gate ever saw them.
+   * </ul>
+   *
+   * <p>The two terms are independent, not layered: {@code expressLastResort} deliberately bypasses
+   * the reassign-count and accepted-then-cancelled checks too, matching cron exactly. It is a true
+   * last resort, not an extra condition stacked on top of the normal gate.
    *
    * <p>The {@code spRejectedAfterCutoff} term is the one difference between the two source crons'
-   * gates. It is always empty for {@link AutoAssignScope#SAME_DAY}, so the same expression serves
-   * both without a branch — the D0 cron simply never had a set to test against.
+   * original gates. It is always empty for {@link AutoAssignScope#SAME_DAY}, so the same expression
+   * serves both without a branch — the D0 cron simply never had a set to test against.
    *
    * <p>Note the polarity, which is easy to read backwards: being <em>in</em> the bypass set means
    * the order is diverted <em>away</em> from auto-assign and into distribution. The distribution
@@ -247,13 +277,24 @@ public class AutoAssignServiceImpl implements AutoAssignService {
       Set<Long> acceptedThenCancelled,
       Set<Long> spRejectedAfterCutoff,
       AutoAssignThresholds thresholds,
-      Map<Long, Long> freshStartMillis) {
+      Map<Long, Long> freshStartMillis,
+      AutoAssignScope scope) {
 
-    return !acceptedThenCancelled.contains(candidate.getOrderId())
-        && !spRejectedAfterCutoff.contains(candidate.getOrderId())
-        && reassignCount < thresholds.getReassignThreshold()
-        && minutesUntilStart(candidate, freshStartMillis)
-            >= thresholds.getPriorityTimeThresholdMinutes();
+    boolean safeToReassign =
+        !acceptedThenCancelled.contains(candidate.getOrderId())
+            && !spRejectedAfterCutoff.contains(candidate.getOrderId())
+            && reassignCount < thresholds.getReassignThreshold()
+            && minutesUntilStart(candidate, freshStartMillis)
+                >= thresholds.getPriorityTimeThresholdMinutes();
+
+    boolean expressLastResort =
+        scope.isExpressBypassApplied()
+            && candidate.isExpressJob()
+            && minutesUntilStart(candidate, freshStartMillis)
+                < thresholds.getExpressMinMinutesBeforeStart()
+            && minutesSinceCreated(candidate) < thresholds.getExpressOrderAgeLookbackMinutes();
+
+    return safeToReassign || expressLastResort;
   }
 
   /**
@@ -301,6 +342,22 @@ public class AutoAssignServiceImpl implements AutoAssignService {
       return UNKNOWN_MINUTES_UNTIL_START;
     }
     return (startMillis - System.currentTimeMillis()) / 60_000L;
+  }
+
+  /**
+   * Minutes since the order was created, or {@link #UNKNOWN_MINUTES_SINCE_CREATED} when {@code
+   * created_at} could not be resolved for this candidate.
+   *
+   * <p>Unlike {@link #minutesUntilStart}, this is not re-read per chunk: {@code created_at} is
+   * immutable once written, so the value the run context resolved at fetch time can never go stale
+   * the way a booking slot can.
+   */
+  private long minutesSinceCreated(AutoAssignCandidate candidate) {
+    Long createdAtMillis = candidate.getCreatedAtMillis();
+    if (createdAtMillis == null) {
+      return UNKNOWN_MINUTES_SINCE_CREATED;
+    }
+    return (System.currentTimeMillis() - createdAtMillis) / 60_000L;
   }
 
   private static void record(

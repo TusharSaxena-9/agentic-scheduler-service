@@ -33,11 +33,37 @@ public enum AutoAssignConfig {
   PRIORITY_TIME_THRESHOLD_MINUTES("AUTO_ASSIGN_PRIORITY_TIME_THRESHOLD_MINUTES", 60),
 
   /**
-   * Minimum runway, in minutes, an order must still have before it is picked up at all. Applied in
-   * the candidate query as {@code order_start_time_with_date >= now + this}, mirroring the cron
-   * DAO's {@code now().plusHours(1)} filter for same-day bookings.
+   * Minimum runway, in minutes, a non-express order must still have before it is picked up at all.
+   * Applied in the candidate query as {@code order_start_time_with_date >= now + this}.
+   *
+   * <p>Cron's own same-day floor has since been reduced to zero (no more {@code now().plusHours(1)}
+   * ), so 60 is now higher than cron's current behaviour, not a mirror of it — left unchanged here
+   * since only the express carve-out below was in scope for that follow-up. An express-flagged
+   * order bypasses this floor entirely regardless; see {@link #EXPRESS_MIN_MINUTES_BEFORE_START}.
    */
-  MIN_LEAD_TIME_MINUTES("AUTO_ASSIGN_MIN_LEAD_TIME_MINUTES", 60);
+  MIN_LEAD_TIME_MINUTES("AUTO_ASSIGN_MIN_LEAD_TIME_MINUTES", 60),
+
+  /**
+   * Minutes-to-start below which a fresh, express-flagged order may still be pushed through
+   * auto-assign as a last resort, bypassing the reassign-count and accepted-then-cancelled checks
+   * entirely. Only applied for {@link com.yesmadam.schedulerservice.jobs.autoassign.enums
+   * .AutoAssignScope#SAME_DAY}.
+   *
+   * <p>Ported from cron's {@code JobDistributionConstants.MIN_MINUTES_BEFORE_START} (currently also
+   * 45), but kept as its own settings-backed key rather than reused directly: that constant is the
+   * distribution engine's own pick-floor for a different decision — whether a fresh distribution
+   * round can still target the order — which happens to share a value today but is owned separately
+   * and could drift.
+   */
+  EXPRESS_MIN_MINUTES_BEFORE_START("AUTO_ASSIGN_EXPRESS_MIN_MINUTES_BEFORE_START", 45),
+
+  /**
+   * How recently, in minutes, an express order must have been created for the last-resort bypass
+   * above to apply — restricts it to an order just placed and already close to its slot, not any
+   * express order that happens to be running late. Ported from cron's {@code
+   * JobDistributionConstants.EXPRESS_ORDER_AGE_LOOKBACK_MINUTES}.
+   */
+  EXPRESS_ORDER_AGE_LOOKBACK_MINUTES("AUTO_ASSIGN_EXPRESS_ORDER_AGE_LOOKBACK_MINUTES", 15);
 
   private final String key;
   private final int defaultValue;

@@ -52,7 +52,7 @@ class AutoAssignWorkflowImplTest {
 
   static class StubAutoAssignActivities implements AutoAssignActivities {
     List<AutoAssignCandidate> candidatesToReturn = Collections.emptyList();
-    AutoAssignThresholds thresholds = new AutoAssignThresholds(2, 60, 60);
+    AutoAssignThresholds thresholds = new AutoAssignThresholds(2, 60, 60, 45, 15);
     List<List<AutoAssignCandidate>> processedChunks = new ArrayList<>();
     List<List<Long>> dispatchedBatches = new ArrayList<>();
     List<AutoAssignScope> scopesSeen = new ArrayList<>();
