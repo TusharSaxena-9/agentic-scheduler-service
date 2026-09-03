@@ -157,6 +157,25 @@ scheduler:
       owner: platform
       description: Track SPs who finished after 8 PM and have not returned within 300m of home
 
+    - name: sp-wallet-sum
+      workflow: com.yesmadam.schedulerservice.jobs.spwalletsum.workflow.SpWalletSumWorkflow
+      # Two small aggregate reads (tbl_sp_wallet / tbl_sp_saving_wallet joined to tbl_sp) plus one
+      # insert — well under 5 minutes, so light per the light/standard/heavy duration split.
+      tier: light
+      cron: "30 0 * * *"        # translated from messagingapis' Spring cron "0 30 0 * * ?"
+      # A late run still produces a useful snapshot — it is "as of now", not a specific historical
+      # window — so a missed run is worth catching up on rather than skipping.
+      catchup-window: PT2H
+      # Sized to cover both activities' scheduleToCloseTimeout worst case (20m + 20m) plus buffer;
+      # placeholder until a real run is observed.
+      run-timeout: PT45M
+      # Feeds a finance-facing balance snapshot; a repeated failure should stop and be looked at
+      # rather than keep silently skipping under the default SKIP overlap policy.
+      pause-on-failure: true
+      enabled: false
+      owner: finance
+      description: Sum all SP main/saving wallet balances (active and deactive) and snapshot the total daily
+
     - name: user-wallet-sum
       workflow: com.yesmadam.schedulerservice.jobs.userwalletsum.workflow.UserWalletSumWorkflow
       # Unmeasured — a single unfiltered full-table SUM over tbl_user, not chunked. Standard rather
