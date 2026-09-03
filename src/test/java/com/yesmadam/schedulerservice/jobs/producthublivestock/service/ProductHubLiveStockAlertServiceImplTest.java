@@ -1,14 +1,15 @@
 package com.yesmadam.schedulerservice.jobs.producthublivestock.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,15 +23,13 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import com.yesmadam.persistence.SettingsForEnalbeDisable;
 import com.yesmadam.schedulerservice.common.mail.MailService;
 import com.yesmadam.schedulerservice.common.whatsapp.service.WhatsappAlertService;
-import com.yesmadam.schedulerservice.jobs.producthublivestock.enums.ProductHubLiveStockAlertConfig;
+import com.yesmadam.schedulerservice.jobs.producthublivestock.config.ProductHubWatchlist;
 import com.yesmadam.schedulerservice.jobs.producthublivestock.model.LiveStockAlertReport;
 import com.yesmadam.schedulerservice.jobs.producthublivestock.model.LiveStockAlertRow;
 import com.yesmadam.schedulerservice.jobs.producthublivestock.projections.LiveStockAlertProjection;
-import com.yesmadam.schedulerservice.jobs.producthublivestock.repository.LiveStockAlertRepository;
-import com.yesmadam.schedulerservice.service.interfaces.SettingService;
+import com.yesmadam.schedulerservice.jobs.producthublivestock.repository.LiveStockAlertDao;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -38,8 +37,8 @@ class ProductHubLiveStockAlertServiceImplTest {
 
   private static final String DETECTED_AT = "16th June, 2026 00:00:00";
 
-  @Mock LiveStockAlertRepository liveStockAlertRepository;
-  @Mock SettingService settingService;
+  @Mock LiveStockAlertDao liveStockAlertDao;
+  @Mock ProductHubWatchlist productHubWatchlist;
   @Mock MailService mailService;
   @Mock WhatsappAlertService whatsappAlertService;
   @InjectMocks ProductHubLiveStockAlertServiceImpl service;
@@ -50,18 +49,8 @@ class ProductHubLiveStockAlertServiceImplTest {
         service, "mailRecipients", List.of("amandeep.saini@yesmadam.com", "  ", ""));
   }
 
-  private void givenSettings(String hubIds, String productIds) {
-    when(settingService.findSettingWithKeys(any()))
-        .thenReturn(
-            Map.of(
-                ProductHubLiveStockAlertConfig.HUB_IDS.key(), setting(hubIds),
-                ProductHubLiveStockAlertConfig.PRODUCT_IDS.key(), setting(productIds)));
-  }
-
-  private static SettingsForEnalbeDisable setting(String value) {
-    SettingsForEnalbeDisable s = new SettingsForEnalbeDisable();
-    s.setValue(value);
-    return s;
+  private void givenWatchlist(Map<Integer, List<Integer>> hubProductIds) {
+    when(productHubWatchlist.hubProductIds()).thenReturn(hubProductIds);
   }
 
   // ================================================================
@@ -69,42 +58,30 @@ class ProductHubLiveStockAlertServiceImplTest {
   // ================================================================
 
   @Test
-  void fetchReport_shouldSkipTheQueryWhenHubIdsAreNotConfigured() {
-    givenSettings("", "5,7");
-
-    LiveStockAlertReport report = service.fetchReport();
-
-    assertThat(report.getRows()).isEmpty();
-    verify(liveStockAlertRepository, never()).findOutOfStock(anyList(), anyList());
-  }
-
-  @Test
-  void fetchReport_shouldSkipTheQueryWhenProductIdsAreNotConfigured() {
-    givenSettings("1,2", "");
-
-    LiveStockAlertReport report = service.fetchReport();
-
-    assertThat(report.getRows()).isEmpty();
-    verify(liveStockAlertRepository, never()).findOutOfStock(anyList(), anyList());
-  }
-
-  @Test
   void fetchReport_shouldMapProjectionRowsOntoTheReport() {
-    givenSettings("1,2", "5,7");
-    when(liveStockAlertRepository.findOutOfStock(List.of(1, 2), List.of(5, 7)))
-        .thenReturn(List.of(projection(1, "Gurgaon Sector 52", 5, "Rica Wax")));
+    Map<Integer, List<Integer>> watchlist = new LinkedHashMap<>(Map.of(1, List.of(5, 7), 2, List.of(6)));
+    givenWatchlist(watchlist);
+    when(liveStockAlertDao.findOutOfStock(watchlist))
+        .thenReturn(
+            List.of(
+                projection(1, "Gurgaon Sector 52", 5, "Rica Wax"),
+                projection(2, "Delhi Saket", 6, "Sokora Facial")));
 
     LiveStockAlertReport report = service.fetchReport();
 
-    assertThat(report.getRows()).hasSize(1);
-    assertThat(report.getRows().get(0).getHubName()).isEqualTo("Gurgaon Sector 52");
-    assertThat(report.getRows().get(0).getProductName()).isEqualTo("Rica Wax");
+    // the whole watchlist goes into a single call — never split into one call per hub.
+    verify(liveStockAlertDao, times(1)).findOutOfStock(anyMap());
+    assertThat(report.getRows()).hasSize(2);
+    assertThat(report.getRows())
+        .extracting(LiveStockAlertRow::getHubName)
+        .containsExactlyInAnyOrder("Gurgaon Sector 52", "Delhi Saket");
   }
 
   @Test
   void fetchReport_shouldCarryQueryTimingAndRowCount() {
-    givenSettings("1", "5");
-    when(liveStockAlertRepository.findOutOfStock(List.of(1), List.of(5)))
+    Map<Integer, List<Integer>> watchlist = Map.of(1, List.of(5));
+    givenWatchlist(watchlist);
+    when(liveStockAlertDao.findOutOfStock(watchlist))
         .thenReturn(List.of(projection(1, "Gurgaon Sector 52", 5, "Rica Wax")));
 
     LiveStockAlertReport report = service.fetchReport();

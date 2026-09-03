@@ -13,24 +13,25 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.yesmadam.persistence.SettingsForEnalbeDisable;
 import com.yesmadam.schedulerservice.common.mail.MailService;
 import com.yesmadam.schedulerservice.common.whatsapp.service.WhatsappAlertService;
-import com.yesmadam.schedulerservice.jobs.producthublivestock.enums.ProductHubLiveStockAlertConfig;
+import com.yesmadam.schedulerservice.jobs.producthublivestock.config.ProductHubWatchlist;
 import com.yesmadam.schedulerservice.jobs.producthublivestock.model.LiveStockAlertReport;
 import com.yesmadam.schedulerservice.jobs.producthublivestock.model.LiveStockAlertRow;
 import com.yesmadam.schedulerservice.jobs.producthublivestock.projections.LiveStockAlertProjection;
-import com.yesmadam.schedulerservice.jobs.producthublivestock.repository.LiveStockAlertRepository;
-import com.yesmadam.schedulerservice.service.interfaces.SettingService;
+import com.yesmadam.schedulerservice.jobs.producthublivestock.repository.LiveStockAlertDao;
 import com.yesmadam.schedulerservice.utils.QueryTimer;
-import com.yesmadam.schedulerservice.utils.SettingConfigUtil;
 
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * Checks {@code tbl_product_inventory_live.live_stock_new} ("Uni Live Stock" on the admin
- * product-hub-inventory page) for every configured hub &times; product combination, and alerts by
- * mail and WhatsApp when it is at or below zero.
+ * product-hub-inventory page) for every product on {@link ProductHubWatchlist} at the hub it is
+ * configured for, and alerts by mail and WhatsApp when it is at or below zero.
+ *
+ * <p>One query total, via {@link LiveStockAlertDao#findOutOfStock}, scoped to the exact hub/product
+ * pairs on the watchlist — not a cross product of every hub against every product, which would flag
+ * a product as out of stock at a hub it was never meant to be checked at.
  *
  * <p>Unlike {@code PassbookMismatchServiceImpl} this is not a window audit — there is no trailing
  * period to bound, just a live snapshot of the current row values, so {@code detectedAt} is simply
@@ -45,8 +46,8 @@ public class ProductHubLiveStockAlertServiceImpl implements ProductHubLiveStockA
       DateTimeFormatter.ofPattern("MMMM, yyyy HH:mm:ss");
   private static final String SOURCE = "Uniware";
 
-  private final LiveStockAlertRepository liveStockAlertRepository;
-  private final SettingService settingService;
+  private final LiveStockAlertDao liveStockAlertDao;
+  private final ProductHubWatchlist productHubWatchlist;
   private final MailService mailService;
   private final WhatsappAlertService whatsappAlertService;
 
@@ -57,12 +58,12 @@ public class ProductHubLiveStockAlertServiceImpl implements ProductHubLiveStockA
   private List<String> mailRecipients;
 
   public ProductHubLiveStockAlertServiceImpl(
-      LiveStockAlertRepository liveStockAlertRepository,
-      SettingService settingService,
+      LiveStockAlertDao liveStockAlertDao,
+      ProductHubWatchlist productHubWatchlist,
       MailService mailService,
       WhatsappAlertService whatsappAlertService) {
-    this.liveStockAlertRepository = liveStockAlertRepository;
-    this.settingService = settingService;
+    this.liveStockAlertDao = liveStockAlertDao;
+    this.productHubWatchlist = productHubWatchlist;
     this.mailService = mailService;
     this.whatsappAlertService = whatsappAlertService;
   }
@@ -73,36 +74,18 @@ public class ProductHubLiveStockAlertServiceImpl implements ProductHubLiveStockA
   public LiveStockAlertReport fetchReport() {
     String detectedAt = formatDetectedAt(LocalDateTime.now(IST));
 
-    Map<String, SettingsForEnalbeDisable> cfg =
-        settingService.findSettingWithKeys(
-            List.of(
-                ProductHubLiveStockAlertConfig.HUB_IDS.key(),
-                ProductHubLiveStockAlertConfig.PRODUCT_IDS.key()));
-    List<Integer> hubIds =
-        SettingConfigUtil.intListConfig(cfg, ProductHubLiveStockAlertConfig.HUB_IDS.key());
-    List<Integer> productIds =
-        SettingConfigUtil.intListConfig(cfg, ProductHubLiveStockAlertConfig.PRODUCT_IDS.key());
-
-    if (hubIds.isEmpty() || productIds.isEmpty()) {
-      log.info(
-          "event=live_stock_check_skipped reason=no_hub_or_product_ids hub_ids={} product_ids={}",
-          hubIds.size(),
-          productIds.size());
-      return new LiveStockAlertReport(detectedAt, List.of());
-    }
+    Map<Integer, List<Integer>> hubProductIds = productHubWatchlist.hubProductIds();
 
     QueryTimer timer = new QueryTimer();
     List<LiveStockAlertProjection> found =
-        timer.time("findOutOfStock", () -> liveStockAlertRepository.findOutOfStock(hubIds, productIds));
+        timer.time("findOutOfStock", () -> liveStockAlertDao.findOutOfStock(hubProductIds));
 
     List<LiveStockAlertRow> rows = new ArrayList<>(found.size());
     found.forEach(p -> rows.add(toRow(p)));
 
     log.info(
-        "event=live_stock_checked hub_ids={} product_ids={} flagged={} durations_ms={} "
-            + "row_counts={}",
-        hubIds.size(),
-        productIds.size(),
+        "event=live_stock_checked hub_count={} flagged={} durations_ms={} row_counts={}",
+        hubProductIds.size(),
         rows.size(),
         timer.getDurationsMs(),
         timer.getRowCounts());

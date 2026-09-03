@@ -91,7 +91,7 @@ public class ProductHubLiveStockAlertWorkflowImpl implements ProductHubLiveStock
     }
 
     try {
-      //activities.whatsappLiveStockAlertReport(report);
+      activities.whatsappLiveStockAlertReport(report);
     } catch (ActivityFailure e) {
       log.warn(
           "event=whatsapp_send_failed workflow_id={} error={}", workflowId, rootCauseMessage(e));
