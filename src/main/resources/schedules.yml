@@ -71,6 +71,25 @@ scheduler:
       owner: platform
       description: Alert when Android or iOS bookings drop to zero in the trailing window
 
+    - name: feedback-reminder
+      workflow: com.yesmadam.schedulerservice.jobs.order.feedbackreminder.workflow.FeedbackReminderWorkflow
+      tier: light
+      # Every 5 minutes, all day. Each of the 3h/24h/48h checkpoints reads an exact 5-minute tile of
+      # tbl_order keyed off this run's nominal scheduled time, so consecutive ticks must tile with no
+      # gap and no overlap — jitter is pinned off, and FeedbackReminderService.TICK_INTERVAL must stay
+      # in sync with this cron's period.
+      cron: "*/5 * * * *"
+      jitter: PT0S
+      # A run that overruns must not silently drop its tile under the default SKIP: that would mean
+      # every order completed in that 5-minute slice permanently never gets its reminder for that
+      # checkpoint. BUFFER_ONE queues the one pending tick instead, so it still runs (with its own
+      # correct nominal time) once the current run finishes.
+      overlap: SCHEDULE_OVERLAP_POLICY_BUFFER_ONE
+      run-timeout: PT5M
+      enabled: false
+      owner: platform
+      description: WhatsApp feedback-reminder nudges at 3h/24h/48h after booking completion when no rating exists yet
+
     - name: order-cancellation-charge-expiry
       workflow: com.yesmadam.schedulerservice.jobs.order.ordercancellationcharge.workflow.OrderCancellationChargeWorkflow
       tier: light
