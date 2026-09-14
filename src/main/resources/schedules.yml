@@ -226,3 +226,18 @@ scheduler:
       enabled: false
       owner: finance
       description: Sum all user wallet balances and snapshot the total daily
+
+    - name: wallet-expiry-notification-enqueue
+      workflow: com.yesmadam.schedulerservice.jobs.walletexpiryreminder.workflow.WalletExpiryReminderWorkflow
+      # Runs at 10 AM. The per-window query is still unbounded (no LIMIT/cursor) — that was
+      tier: standard
+      cron: "0 10 * * *"
+
+      catchup-window: PT6H
+
+      run-timeout: PT2H
+
+      pause-on-failure: true
+      enabled: false
+      owner: platform
+      description: Enqueue users 30/7/4/1 day(s) from wallet-balance expiry onto the wallet-expiry-notification SQS queue
