@@ -176,6 +176,20 @@ scheduler:
       owner: platform
       description: Track SPs who finished after 8 PM and have not returned within 300m of home
 
+    - name: sp-product-order-sync
+      workflow: com.yesmadam.schedulerservice.jobs.spproductordersync.workflow.SpProductOrderSyncWorkflow
+      # Two unchunked bulk UPDATEs, not measured yet; standard is the shape's default landing tier
+      # per TaskQueueTier's own javadoc. Revisit once a real duration is observed.
+      tier: standard
+      cron: "0 */2 * * *"       # translated from messagingapis' Spring cron "0 0 */2 * * *"
+      # Cumulative, not time-windowed: the WHERE clause matches whatever backlog currently exists,
+      # so a missed tick isn't lost — the next one picks up everything outstanding. Default catchup
+      # window is fine as-is; noted here so it reads as decided rather than overlooked.
+      run-timeout: PT15M
+      enabled: false
+      owner: platform
+      description: Increment SP inventory and flip delivered-but-unavailable products to available
+
     - name: sp-wallet-sum
       workflow: com.yesmadam.schedulerservice.jobs.spwalletsum.workflow.SpWalletSumWorkflow
       # Two small aggregate reads (tbl_sp_wallet / tbl_sp_saving_wallet joined to tbl_sp) plus one
