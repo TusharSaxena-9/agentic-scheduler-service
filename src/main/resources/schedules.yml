@@ -204,7 +204,7 @@ scheduler:
       run-timeout: PT45M
       # Feeds a finance-facing balance snapshot; a repeated failure should stop and be looked at
       # rather than keep silently skipping under the default SKIP overlap policy.
-      pause-on-failure: true
+      pause-on-failure: false
       enabled: false
       owner: finance
       description: Sum all SP main/saving wallet balances (active and deactive) and snapshot the total daily
@@ -222,7 +222,7 @@ scheduler:
       run-timeout: PT30M
       # Feeds a finance-facing balance snapshot; a repeated failure should stop and be looked at
       # rather than keep silently skipping under the default SKIP overlap policy.
-      pause-on-failure: true
+      pause-on-failure: false
       enabled: false
       owner: finance
       description: Sum all user wallet balances and snapshot the total daily
