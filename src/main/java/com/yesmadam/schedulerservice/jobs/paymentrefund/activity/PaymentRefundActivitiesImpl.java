@@ -33,8 +33,8 @@ public class PaymentRefundActivitiesImpl implements PaymentRefundActivities {
   @HandleExceptions
   public List<Long> findPendingChecksumIds() {
     Instant now = Instant.now();
-    Timestamp windowStart = Timestamp.valueOf("2026-09-17 17:38:57"); // Timestamp.from(now.minus(WINDOW_START_LAG));
-    Timestamp windowEnd = Timestamp.valueOf("2026-09-17 17:42:57");  //Timestamp.from(now.minus(WINDOW_END_LAG));
+    Timestamp windowStart =  Timestamp.from(now.minus(WINDOW_START_LAG));
+    Timestamp windowEnd = Timestamp.from(now.minus(WINDOW_END_LAG));
     return service.findPendingChecksumIds(windowStart, windowEnd);
   }
 
