@@ -166,6 +166,29 @@ scheduler:
       owner: platform
       description: Update SEBAL sub-category SP tags
 
+    - name: sp-availability-auto-on
+      workflow: com.yesmadam.schedulerservice.jobs.spavailabilityautoon.workflow.SpAvailabilityAutoOnWorkflow
+      tier: light
+      cron: "30 0 * * *"      
+      catchup-window: PT6H      
+      pause-on-failure: false     
+      run-timeout: PT45M
+      enabled: false
+      owner: platform
+      description: Turn SP availability on for active SPs whose first kit assignment was approved yesterday
+
+    - name: sp-kit-approved-notify
+      workflow: com.yesmadam.schedulerservice.jobs.spavailabilityautoon.workflow.SpKitApprovedNotifyWorkflow      
+      tier: light
+      cron: "0 20 * * *"      
+      jitter: PT2M      
+      catchup-window: PT2H     
+      pause-on-failure: false
+      run-timeout: PT45M      
+      enabled: false
+      owner: platform
+      description: CleverTap heads-up to active SPs whose first kit assignment was approved yesterday
+
     - name: sp-not-reached-home
       workflow: com.yesmadam.schedulerservice.jobs.spNotReachedHome.workflow.SpNotReachedHomeWorkflow
       tier: light
