@@ -69,7 +69,7 @@ public class CouponWhatsappReminderActivitiesImpl implements CouponWhatsappRemin
       // Batch-claim whatever actually made it to SQS — including on a partial failure — so a
       // retry's fetch query (rule: wa_status = PENDING) never sees, and never re-publishes, these
       // again. One UPDATE for the whole batch rather than one per claim.
-      writer.markSent(sentClaimIds);
+      writer.markDelivered(sentClaimIds);
     }
     return sentClaimIds.size();
   }

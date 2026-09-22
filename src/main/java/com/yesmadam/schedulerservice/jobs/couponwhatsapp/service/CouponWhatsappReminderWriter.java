@@ -10,7 +10,7 @@ import com.yesmadam.persistence.coupon.CouponClaim.WaStatus;
 import com.yesmadam.schedulerservice.jobs.couponwhatsapp.repository.CouponWhatsappCandidateRepository;
 
 /**
- * Claims coupon-WhatsApp candidates as sent, in one batch UPDATE per call rather than one per
+ * Claims coupon-WhatsApp candidates as delivered, in one batch UPDATE per call rather than one per
  * claim. Called only with claim ids that were actually published to SQS, so a mid-run retry that
  * re-fetches candidates does not see (and does not re-publish) anything this already marked.
  */
@@ -24,10 +24,11 @@ public class CouponWhatsappReminderWriter {
   }
 
   @Transactional
-  public int markSent(List<Long> claimIds) {
+  public int markDelivered(List<Long> claimIds) {
     if (CollectionUtils.isEmpty(claimIds)) {
       return 0;
     }
-    return candidateRepository.markSent(claimIds, WaStatus.SENT.name(), WaStatus.PENDING.name());
+    return candidateRepository.markDelivered(
+        claimIds, WaStatus.DELIVERED.name(), WaStatus.PENDING.name());
   }
 }

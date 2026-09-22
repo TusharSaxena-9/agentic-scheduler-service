@@ -46,12 +46,11 @@ public interface CouponWhatsappCandidateRepository extends JpaRepository<Order, 
       @Param("windowEnd") Timestamp windowEnd);
 
   /**
-   * Batch-claims the given claims as sent (i.e. handed to SQS) — one UPDATE for the whole set, not
-   * one per row. {@code wa_sent_at} is stamped later, by the WhatsApp consumer, when the message is
-   * actually delivered (there is no separate delivered-at column). The {@code wa_status =
-   * :pendingStatus} guard makes this safe to call again with a claim id that was already claimed
-   * (by an earlier attempt of this same activity, or by a previous run): the row simply isn't
-   * matched a second time, so re-marking is a no-op rather than an error.
+   * Batch-claims the given claims as delivered — one UPDATE for the whole set, not one per row.
+   * {@code wa_sent_at} is stamped here, at the moment this job hands the message to SQS. The
+   * {@code wa_status = :pendingStatus} guard makes this safe to call again with a claim id that was
+   * already claimed (by an earlier attempt of this same activity, or by a previous run): the row
+   * simply isn't matched a second time, so re-marking is a no-op rather than an error.
    *
    * @return the number of rows actually updated (may be less than {@code claimIds.size()} if some
    *     were already marked by an earlier attempt).
@@ -61,13 +60,13 @@ public interface CouponWhatsappCandidateRepository extends JpaRepository<Order, 
       value =
           """
     update ysmdm_users.tbl_coupon_claim
-    set wa_status = :sentStatus
+    set wa_status = :deliveredStatus, wa_sent_at = now()
     where id in (:claimIds)
       and wa_status = :pendingStatus
     """,
       nativeQuery = true)
-  int markSent(
+  int markDelivered(
       @Param("claimIds") List<Long> claimIds,
-      @Param("sentStatus") String sentStatus,
+      @Param("deliveredStatus") String deliveredStatus,
       @Param("pendingStatus") String pendingStatus);
 }
