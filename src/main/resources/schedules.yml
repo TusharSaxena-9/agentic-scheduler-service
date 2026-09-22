@@ -264,3 +264,17 @@ scheduler:
       enabled: false
       owner: platform
       description: Enqueue users 30/7/4/1 day(s) from wallet-balance expiry onto the wallet-expiry-notification SQS queue
+
+    - name: coupon-whatsapp-reminder-enqueue
+      workflow: com.yesmadam.schedulerservice.jobs.couponwhatsapp.workflow.CouponWhatsappReminderWorkflow
+      # Runs at 9 AM daily. DEMO wiring — queue URL and WhatsApp template are placeholders (see
+      # application-*.properties and cxconsumers' coupon-whatsapp consumer) until the real ones are
+      # provided; left disabled until then.
+      tier: standard
+      cron: "0 9 * * *"
+      catchup-window: PT2H
+      run-timeout: PT30M
+      pause-on-failure: true
+      enabled: false
+      owner: platform
+      description: Enqueue yesterday's completed orders' claimed-but-unsent brand coupons onto the coupon-whatsapp SQS queue
