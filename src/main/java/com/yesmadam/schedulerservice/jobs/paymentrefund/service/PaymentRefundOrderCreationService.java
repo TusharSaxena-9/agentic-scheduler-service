@@ -260,21 +260,21 @@ public class PaymentRefundOrderCreationService {
     }
 
     boolean orderCreated = false;
-//    try {
-//      Map<String, Object> orderRequest =
-//          objectMapper.readValue(row.getOrderRequestText(), Map.class);
-//      orderRequest.put("payment_source_id", paymentSourceId);
-//
-//      String bearerToken = verifyOtpAndGetBearerToken(row.getUserId());
-//      if (bearerToken != null) {
-//        orderCreated = appServerOrderClient.createOrder(orderRequest, bearerToken);
-//      }
-//    } catch (Exception e) {
-//      log.error(
-//          "event=payu_order_creation_attempt_failed checksum_id={} error={}",
-//          row.getId(),
-//          e.getMessage());
-//    }
+    try {
+      Map<String, Object> orderRequest =
+          objectMapper.readValue(row.getOrderRequestText(), Map.class);
+      orderRequest.put("payment_source_id", paymentSourceId);
+
+      String bearerToken = verifyOtpAndGetBearerToken(row.getUserId());
+      if (bearerToken != null) {
+        orderCreated = appServerOrderClient.createOrder(orderRequest, bearerToken);
+      }
+    } catch (Exception e) {
+      log.error(
+          "event=payu_order_creation_attempt_failed checksum_id={} error={}",
+          row.getId(),
+          e.getMessage());
+    }
 
     if (orderCreated) {
       checksumRowWriter.markHandled(row.getId(), "Order Created From Scheduler");
@@ -336,6 +336,21 @@ public class PaymentRefundOrderCreationService {
    * existingCheckSumRecord.setOrderCreated(true)} after it. As with the Paytm branch, the outcome
    * returned to the caller is truthful even though the DB write is not: {@code attemptPayuRefund}
    * returning {@code null} is reported as {@code FAILED}.
+   *
+   * <p>The {@code existsByTransferId} re-check below is not source-derived — it closes a real gap
+   * found after this job was in UAT: app-server's {@code createOrder} has ~12 validation branches
+   * (slot expired, slot unavailable, package already completed, ...) that, on failure, call their
+   * own {@code getOrderRefundedOnError} inline before returning FAILED — writing the exact same
+   * {@code tbl_order_refunded.transferId = payment_source_id} row this job reads, via the shared
+   * {@code ym-common-entity} {@code OrderRefunded} entity. {@link #processRow}'s idempotency check
+   * runs once, before the {@code createOrder} call this row's caller just made — so by the time
+   * this method runs, app-server may have already refunded the transaction as a side effect of
+   * that very call. Without re-checking here, this job would call PayU's refund API a second time
+   * for a transaction app-server just refunded, which PayU correctly rejects (seen in UAT as
+   * "Invalid amount" — nothing left to refund) — and the customer got the wrong WhatsApp template
+   * for it (Case 3 "pending" instead of nothing, since app-server's own refund already sent its
+   * own Karix SMS). This does not need a new database write to close: the check app-server itself
+   * just performed is already visible here on the same table.
    */
   private PaymentRefundRowResult fallBackToPayuRefund(
       ChecksumRequestEntity row, String paymentSourceId, PayuVerifyResult verify) {
@@ -345,6 +360,15 @@ public class PaymentRefundOrderCreationService {
     if (!stillNoOrder) {
       return new PaymentRefundRowResult(
           row.getId(), PaymentRefundRowOutcome.ALREADY_HANDLED, "order appeared during processing");
+    }
+    if (orderRefundedRepository.existsByTransferId(paymentSourceId)) {
+      // app-server's own createOrder call (the one processPayuRow just made) already refunded
+      // this transaction as a side effect of rejecting the order — do not refund it again.
+      checksumRowWriter.markHandled(row.getId(), "Refund From Scheduler");
+      return new PaymentRefundRowResult(
+          row.getId(),
+          PaymentRefundRowOutcome.ALREADY_HANDLED,
+          "app-server already refunded this transaction during create-order");
     }
 
     PayuTransactionsEntity existing =

@@ -297,6 +297,36 @@ class PaymentRefundOrderCreationServiceTest {
   }
 
   @Test
+  void payuFallbackRefund_appServerAlreadyRefundedDuringCreateOrder_skipsSecondRefundCall() {
+    when(checksumRequestRepository.findById(CHECKSUM_ID))
+        .thenReturn(Optional.of(row("Service", "payu")));
+    when(orderRepository.existsByPaymentSourceIdAndPaymentSourceIn(eq(PAYMENT_SOURCE_ID), any()))
+        .thenReturn(false);
+    // First call is processRow's top-level guard (not yet refunded, so we proceed). Second call
+    // is fallBackToPayuRefund's own re-check, made *after* createOrder ran — app-server's own
+    // create-order validation (e.g. "selected slot time expired") can call its own
+    // getOrderRefundedOnError and write this exact tbl_order_refunded row as a side effect of
+    // rejecting the order, before our code ever sees the FAILED response.
+    when(orderRefundedRepository.existsByTransferId(PAYMENT_SOURCE_ID)).thenReturn(false, true);
+    when(payuVerificationClient.verifyPayment(PAYMENT_SOURCE_ID))
+        .thenReturn(new PayuVerifyResult("success", "now", "mihpay-1", "500", "CC", "{}"));
+    when(userRepository.findById(USER_ID)).thenReturn(Optional.of(customer()));
+    when(appServerOrderClient.verifyOtpAndGetBearerToken(any())).thenReturn("Bearer token");
+    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(false);
+
+    PaymentRefundRowResult result = service.processRow(CHECKSUM_ID);
+
+    assertThat(result.getOutcome()).isEqualTo(PaymentRefundRowOutcome.ALREADY_HANDLED);
+    verify(payuVerificationClient, never()).refund(anyString(), anyString());
+    verify(payuTransactionsRepository, never()).findFirstByOrderIdOrderByIdDesc(anyString());
+    verify(orderRefundedRepository, never()).save(any());
+    verify(karixSmsClient, never()).sendRefundNotice(any());
+    verify(whatsappClient, never()).sendRefundInitiated(any(), any(), any());
+    // Still marked handled — app-server already resolved this transaction, nothing left to do.
+    verify(checksumRowWriter).markHandled(CHECKSUM_ID, "Refund From Scheduler");
+  }
+
+  @Test
   void payuFallbackRefund_unparsableAmount_neverCallsGateway_reportsFailedNotIssued() {
     when(checksumRequestRepository.findById(CHECKSUM_ID))
         .thenReturn(Optional.of(row("Service", "payu")));
