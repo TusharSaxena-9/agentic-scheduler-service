@@ -68,9 +68,12 @@ public class AppServerOrderClient {
   }
 
   /**
-   * @return true if app-server reported {@code status=success} for the create-order call.
+   * @return the parsed response (check {@code getStatus()} for {@code "success"}), or {@code
+   *     null} if the call itself failed. Callers need {@code getObject()} for the fields
+   *     (doid/booking_date/booking_time) shown in the "payment_booking_created" WhatsApp template
+   *     — a bare success/fail boolean isn't enough anymore.
    */
-  public boolean createOrder(Map<String, Object> orderRequest, String bearerToken) {
+  public AppServerApiResponse createOrder(Map<String, Object> orderRequest, String bearerToken) {
     try {
       HttpHeaders headers = new HttpHeaders();
       headers.setContentType(MediaType.APPLICATION_JSON);
@@ -85,13 +88,13 @@ public class AppServerOrderClient {
           "event=create_order_called payment_source_id={} success={}",
           orderRequest.get("payment_source_id"),
           success);
-      return success;
+      return response;
     } catch (RuntimeException e) {
       log.error(
           "event=create_order_failed payment_source_id={} error={}",
           orderRequest.get("payment_source_id"),
           e.getMessage());
-      return false;
+      return null;
     }
   }
 }

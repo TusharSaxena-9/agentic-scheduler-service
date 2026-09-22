@@ -21,7 +21,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.yesmadam.persistence.PaytmStatusResponse;
 import com.yesmadam.persistence.User;
+import com.yesmadam.schedulerservice.jobs.paymentrefund.model.AppServerApiResponse;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.ChecksumRequestEntity;
+import com.yesmadam.schedulerservice.jobs.paymentrefund.model.CreateOrderObject;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PaymentRefundRowOutcome;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PaymentRefundRowResult;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PaytmRefundResult;
@@ -101,6 +103,18 @@ class PaymentRefundOrderCreationServiceTest {
     User customer = new User();
     customer.setMobile(9876543210L);
     return customer;
+  }
+
+  private static AppServerApiResponse successCreateOrderResponse(
+      String doid, String bookingDate, String oid) {
+    AppServerApiResponse response = new AppServerApiResponse();
+    response.setStatus("success");
+    CreateOrderObject object = new CreateOrderObject();
+    object.setDoid(doid);
+    object.setBookingDate(bookingDate);
+    object.setOid(oid);
+    response.setObject(object);
+    return response;
   }
 
   // --- already-handled short-circuits ---
@@ -236,7 +250,8 @@ class PaymentRefundOrderCreationServiceTest {
         .thenReturn(new PayuVerifyResult("success", "now", "mihpay-1", "500", "CC", "{}"));
     when(userRepository.findById(USER_ID)).thenReturn(Optional.of(customer()));
     when(appServerOrderClient.verifyOtpAndGetBearerToken(any())).thenReturn("Bearer token");
-    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(true);
+    when(appServerOrderClient.createOrder(any(), eq("Bearer token")))
+        .thenReturn(successCreateOrderResponse("vQ88BbZ5Pk", "22-09-2026", "990002780"));
 
     PaymentRefundRowResult result = service.processRow(CHECKSUM_ID);
 
@@ -244,6 +259,11 @@ class PaymentRefundOrderCreationServiceTest {
     verify(checksumRowWriter).markHandled(CHECKSUM_ID, "Order Created From Scheduler");
     verify(payuVerificationClient, never()).refund(anyString(), anyString());
     verify(orderRefundedRepository, never()).save(any());
+    // The WhatsApp template shows the customer-facing doid ("vQ88BbZ5Pk"), never the transaction
+    // id — the real booking_date from the response, and oid as the button's URL suffix.
+    verify(whatsappClient)
+        .sendBookingCreated(
+            anyString(), any(), eq("vQ88BbZ5Pk"), eq("22-09-2026"), eq("990002780"));
   }
 
   @Test
@@ -276,7 +296,7 @@ class PaymentRefundOrderCreationServiceTest {
         .thenReturn(new PayuVerifyResult("success", "now", "mihpay-1", "1299.50", "CC", "{}"));
     when(userRepository.findById(USER_ID)).thenReturn(Optional.of(customer()));
     when(appServerOrderClient.verifyOtpAndGetBearerToken(any())).thenReturn("Bearer token");
-    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(false);
+    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(null);
     when(payuTransactionsRepository.findFirstByOrderIdOrderByIdDesc(PAYMENT_SOURCE_ID))
         .thenReturn(new PayuTransactionsEntity());
     when(payuVerificationClient.refund(eq("mihpay-1"), eq("1299.50")))
@@ -312,7 +332,7 @@ class PaymentRefundOrderCreationServiceTest {
         .thenReturn(new PayuVerifyResult("success", "now", "mihpay-1", "500", "CC", "{}"));
     when(userRepository.findById(USER_ID)).thenReturn(Optional.of(customer()));
     when(appServerOrderClient.verifyOtpAndGetBearerToken(any())).thenReturn("Bearer token");
-    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(false);
+    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(null);
 
     PaymentRefundRowResult result = service.processRow(CHECKSUM_ID);
 
@@ -337,7 +357,7 @@ class PaymentRefundOrderCreationServiceTest {
         .thenReturn(new PayuVerifyResult("success", "now", "mihpay-1", "", "CC", "{}"));
     when(userRepository.findById(USER_ID)).thenReturn(Optional.of(customer()));
     when(appServerOrderClient.verifyOtpAndGetBearerToken(any())).thenReturn("Bearer token");
-    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(false);
+    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(null);
     when(payuTransactionsRepository.findFirstByOrderIdOrderByIdDesc(PAYMENT_SOURCE_ID))
         .thenReturn(new PayuTransactionsEntity());
 

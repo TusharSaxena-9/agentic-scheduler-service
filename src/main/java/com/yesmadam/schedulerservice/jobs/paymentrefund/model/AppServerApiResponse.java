@@ -15,4 +15,7 @@ public class AppServerApiResponse {
 
   private String status;
   private String message;
+
+  /** Only present on the create-order response; null for the OTP-verify response. */
+  private CreateOrderObject object;
 }

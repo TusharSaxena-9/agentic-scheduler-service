@@ -16,7 +16,9 @@ import com.yesmadam.persistence.OrderRefunded;
 import com.yesmadam.persistence.PaytmStatusResponse;
 import com.yesmadam.persistence.User;
 import com.yesmadam.persistence.UserOTP;
+import com.yesmadam.schedulerservice.jobs.paymentrefund.model.AppServerApiResponse;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.ChecksumRequestEntity;
+import com.yesmadam.schedulerservice.jobs.paymentrefund.model.CreateOrderObject;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.OtpVerificationRequest;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PaymentRefundRowOutcome;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PaymentRefundRowResult;
@@ -259,7 +261,7 @@ public class PaymentRefundOrderCreationService {
           row.getId(), PaymentRefundRowOutcome.NOT_SUCCESSFUL_YET, verify.getStatus());
     }
 
-    boolean orderCreated = false;
+    AppServerApiResponse createOrderResponse = null;
     try {
       Map<String, Object> orderRequest =
           objectMapper.readValue(row.getOrderRequestText(), Map.class);
@@ -267,7 +269,7 @@ public class PaymentRefundOrderCreationService {
 
       String bearerToken = verifyOtpAndGetBearerToken(row.getUserId());
       if (bearerToken != null) {
-        orderCreated = appServerOrderClient.createOrder(orderRequest, bearerToken);
+        createOrderResponse = appServerOrderClient.createOrder(orderRequest, bearerToken);
       }
     } catch (Exception e) {
       log.error(
@@ -276,55 +278,37 @@ public class PaymentRefundOrderCreationService {
           e.getMessage());
     }
 
+    boolean orderCreated =
+        createOrderResponse != null && "success".equalsIgnoreCase(createOrderResponse.getStatus());
     if (orderCreated) {
       checksumRowWriter.markHandled(row.getId(), "Order Created From Scheduler");
-      notifyBookingCreated(row.getUserId(), paymentSourceId, row.getOrderRequestText());
+      notifyBookingCreated(row.getUserId(), createOrderResponse.getObject());
       return new PaymentRefundRowResult(row.getId(), PaymentRefundRowOutcome.ORDER_CREATED, null);
     }
     return fallBackToPayuRefund(row, paymentSourceId, verify);
   }
 
   /**
-   * WhatsApp Case 2 (new capability, not in the source cron). {@code orderId} and {@code
-   * scheduledDate} are best-effort: the source never parses the create-order response for an
-   * order id, so {@code paymentSourceId} stands in for it, and the scheduled date is a heuristic
-   * guess at the stored request payload's field name — both need a confirmed real source once the
-   * create-order response/request schema is known.
+   * WhatsApp Case 2. {@code doid} (not the transaction id) is what create-order's own response
+   * shows the customer, so that's what goes in the template — same for {@code booking_date} and
+   * the button's URL suffix ({@code oid}), all read straight from the response rather than guessed
+   * at from the stored request payload.
    */
-  private void notifyBookingCreated(Long userId, String paymentSourceId, String orderRequestText) {
+  private void notifyBookingCreated(Long userId, CreateOrderObject createOrderObject) {
     try {
       User customer = userRepository.findById(userId).orElse(null);
       if (customer == null) {
         return;
       }
+      String orderId = createOrderObject == null ? null : createOrderObject.getDoid();
+      String scheduledDate = createOrderObject == null ? null : createOrderObject.getBookingDate();
+      String buttonSuffix = createOrderObject == null ? null : createOrderObject.getOid();
       whatsappClient.sendBookingCreated(
-          String.valueOf(customer.getMobile()),
-          customer.getName(),
-          paymentSourceId,
-          extractScheduledDate(orderRequestText),
-          "view_detail");
+          String.valueOf(customer.getMobile()), customer.getName(), orderId, scheduledDate, buttonSuffix);
     } catch (Exception e) {
       log.error(
           "event=booking_created_whatsapp_lookup_failed user_id={} error={}", userId, e.getMessage());
     }
-  }
-
-  /** Best-effort scan of the stored create-order request JSON for a recognizable date field. */
-  @SuppressWarnings("unchecked")
-  private String extractScheduledDate(String orderRequestText) {
-    try {
-      Map<String, Object> orderRequest = objectMapper.readValue(orderRequestText, Map.class);
-      for (String key :
-          List.of("bookingDate", "booking_date", "scheduledDate", "scheduled_date", "date")) {
-        Object value = orderRequest.get(key);
-        if (value != null) {
-          return String.valueOf(value);
-        }
-      }
-    } catch (Exception e) {
-      log.error("event=scheduled_date_extraction_failed error={}", e.getMessage());
-    }
-    return "";
   }
 
   /**
