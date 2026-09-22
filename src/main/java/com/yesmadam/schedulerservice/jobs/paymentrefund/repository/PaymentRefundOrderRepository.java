@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.yesmadam.persistence.Order;
 
@@ -18,6 +19,14 @@ import com.yesmadam.persistence.Order;
 @Repository
 public interface PaymentRefundOrderRepository extends JpaRepository<Order, Long> {
 
+  /**
+   * A {@code @Query} method does not inherit the read-only treatment Spring Data gives derived
+   * {@code find*} methods for free (CLAUDE.md rule 13) — without this, {@code
+   * ReadWriteRoutingDataSource} would route every idempotency check here to the writer. This runs
+   * twice per PayU row ({@code processRow}'s guard and {@code fallBackToPayuRefund}'s
+   * double-verification), so it is avoidable primary load, not a style nit.
+   */
+  @Transactional(readOnly = true)
   @Query(
       "select count(o) > 0 from Order o "
           + "where o.payment_source_id = :paymentSourceId and o.payment_source in :paymentSources")

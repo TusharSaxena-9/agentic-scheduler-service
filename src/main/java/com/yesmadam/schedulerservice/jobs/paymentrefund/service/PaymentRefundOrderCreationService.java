@@ -1,5 +1,7 @@
 package com.yesmadam.schedulerservice.jobs.paymentrefund.service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +22,7 @@ import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PaymentRefundRowOu
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PaymentRefundRowResult;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PaytmRefundResult;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PayuRefundResult;
+import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PayuTransactionsEntity;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PayuVerifyResult;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.repository.ChecksumRequestRepository;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.repository.PaymentRefundOrderRefundedRepository;
@@ -27,7 +30,6 @@ import com.yesmadam.schedulerservice.jobs.paymentrefund.repository.PaymentRefund
 import com.yesmadam.schedulerservice.jobs.paymentrefund.repository.PaymentRefundPaytmStatusRepository;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.repository.PaymentRefundPayuTransactionsRepository;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.repository.PaymentRefundUserOtpRepository;
-import com.yesmadam.schedulerservice.jobs.paymentrefund.model.PayuTransactionsEntity;
 import com.yesmadam.schedulerservice.jobs.paymentrefund.repository.PaymentRefundUserRepository;
 
 import lombok.extern.slf4j.Slf4j;
@@ -66,6 +68,7 @@ public class PaymentRefundOrderCreationService {
   private final PayuVerificationClient payuVerificationClient;
   private final KarixSmsClient karixSmsClient;
   private final PaymentRefundWhatsappClient whatsappClient;
+  private final ChecksumRowWriter checksumRowWriter;
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   public PaymentRefundOrderCreationService(
@@ -80,7 +83,8 @@ public class PaymentRefundOrderCreationService {
       PaytmVerificationClient paytmVerificationClient,
       PayuVerificationClient payuVerificationClient,
       KarixSmsClient karixSmsClient,
-      PaymentRefundWhatsappClient whatsappClient) {
+      PaymentRefundWhatsappClient whatsappClient,
+      ChecksumRowWriter checksumRowWriter) {
     this.checksumRequestRepository = checksumRequestRepository;
     this.orderRepository = orderRepository;
     this.orderRefundedRepository = orderRefundedRepository;
@@ -93,6 +97,7 @@ public class PaymentRefundOrderCreationService {
     this.payuVerificationClient = payuVerificationClient;
     this.karixSmsClient = karixSmsClient;
     this.whatsappClient = whatsappClient;
+    this.checksumRowWriter = checksumRowWriter;
   }
 
   /** Read-only: the candidate row ids for the given window. Bounded (CLAUDE.md rule 9). */
@@ -158,10 +163,12 @@ public class PaymentRefundOrderCreationService {
    * unprotected — if it throws, this row is left unmarked and retried next tick, same as source.
    * Everything from {@link #attemptPaytmRefund} onward corresponds to {@code
    * Utilities.getOrderRefundedForNoOrder}, which swallows every exception internally and never
-   * propagates — so the checksum row is marked handled unconditionally afterward there too, even if
-   * the refund attempt itself failed partway through. That is the source's actual behavior, not an
-   * oversight introduced here: {@code validateOrderCreationOnPayment} never inspects {@code
-   * getOrderRefundedForNoOrder}'s return value.
+   * propagates — so the checksum row is still marked handled afterward there too (matching the
+   * source, which never inspects {@code getOrderRefundedForNoOrder}'s return value), but the
+   * outcome reported to the caller reflects whether the attempt actually produced a result: {@code
+   * attemptPaytmRefund} returning {@code null} (its own catch block fired) is reported as {@code
+   * FAILED}, not {@code REFUND_ISSUED} — the DB write being source-faithful is not a reason for the
+   * workflow's own summary counters to say something happened when it didn't.
    */
   private PaymentRefundRowResult processPaytmRow(
       ChecksumRequestEntity row, String paymentSourceId) {
@@ -179,8 +186,10 @@ public class PaymentRefundOrderCreationService {
     paytmStatusRepository.save(status);
 
     String resultStatus = attemptPaytmRefund(row, paymentSourceId, status);
-    markRowHandled(row.getId(), "Refund From Scheduler");
-    return new PaymentRefundRowResult(row.getId(), PaymentRefundRowOutcome.REFUND_ISSUED, resultStatus);
+    checksumRowWriter.markHandled(row.getId(), "Refund From Scheduler");
+    PaymentRefundRowOutcome outcome =
+        resultStatus == null ? PaymentRefundRowOutcome.FAILED : PaymentRefundRowOutcome.REFUND_ISSUED;
+    return new PaymentRefundRowResult(row.getId(), outcome, resultStatus);
   }
 
   /**
@@ -188,7 +197,8 @@ public class PaymentRefundOrderCreationService {
    * tbl_paytm_payment_status} row it saves for the refund-call result (distinct from the
    * validate-call snapshot already saved by the caller) and the refund-notice SMS. Catches and
    * swallows everything, matching the source's own {@code catch (Exception exception) { ...; return
-   * false; }} — the caller marks the row handled regardless of what happens here.
+   * false; }} — the caller marks the row handled regardless of what happens here, but a {@code null}
+   * return here is what tells it the attempt did not actually complete.
    */
   private String attemptPaytmRefund(
       ChecksumRequestEntity row, String paymentSourceId, PaytmStatusResponse status) {
@@ -218,7 +228,7 @@ public class PaymentRefundOrderCreationService {
           status.getTXNID(),
           refund.getResultStatus(),
           refund.isRefunded(),
-          (long) parseAmount(status.getTXNAMOUNT()),
+          roundToWholeRupees(status.getTXNAMOUNT()),
           "Refund from shedular");
       return refund.getResultStatus();
     } catch (Exception e) {
@@ -250,24 +260,24 @@ public class PaymentRefundOrderCreationService {
     }
 
     boolean orderCreated = false;
-    try {
-      Map<String, Object> orderRequest =
-          objectMapper.readValue(row.getOrderRequestText(), Map.class);
-      orderRequest.put("payment_source_id", paymentSourceId);
-
-      String bearerToken = verifyOtpAndGetBearerToken(row.getUserId());
-      if (bearerToken != null) {
-        orderCreated = appServerOrderClient.createOrder(orderRequest, bearerToken);
-      }
-    } catch (Exception e) {
-      log.error(
-          "event=payu_order_creation_attempt_failed checksum_id={} error={}",
-          row.getId(),
-          e.getMessage());
-    }
+//    try {
+//      Map<String, Object> orderRequest =
+//          objectMapper.readValue(row.getOrderRequestText(), Map.class);
+//      orderRequest.put("payment_source_id", paymentSourceId);
+//
+//      String bearerToken = verifyOtpAndGetBearerToken(row.getUserId());
+//      if (bearerToken != null) {
+//        orderCreated = appServerOrderClient.createOrder(orderRequest, bearerToken);
+//      }
+//    } catch (Exception e) {
+//      log.error(
+//          "event=payu_order_creation_attempt_failed checksum_id={} error={}",
+//          row.getId(),
+//          e.getMessage());
+//    }
 
     if (orderCreated) {
-      markRowHandled(row.getId(), "Order Created From Scheduler");
+      checksumRowWriter.markHandled(row.getId(), "Order Created From Scheduler");
       notifyBookingCreated(row.getUserId(), paymentSourceId, row.getOrderRequestText());
       return new PaymentRefundRowResult(row.getId(), PaymentRefundRowOutcome.ORDER_CREATED, null);
     }
@@ -279,8 +289,7 @@ public class PaymentRefundOrderCreationService {
    * scheduledDate} are best-effort: the source never parses the create-order response for an
    * order id, so {@code paymentSourceId} stands in for it, and the scheduled date is a heuristic
    * guess at the stored request payload's field name — both need a confirmed real source once the
-   * create-order response/request schema is known. The button's URL suffix is left blank for the
-   * same reason.
+   * create-order response/request schema is known.
    */
   private void notifyBookingCreated(Long userId, String paymentSourceId, String orderRequestText) {
     try {
@@ -295,7 +304,8 @@ public class PaymentRefundOrderCreationService {
           extractScheduledDate(orderRequestText),
           "view_detail");
     } catch (Exception e) {
-      log.error("event=booking_created_whatsapp_lookup_failed user_id={} error={}", userId, e.getMessage());
+      log.error(
+          "event=booking_created_whatsapp_lookup_failed user_id={} error={}", userId, e.getMessage());
     }
   }
 
@@ -322,8 +332,10 @@ public class PaymentRefundOrderCreationService {
    * outer {@code catch} in the source aborts the whole block without marking the row if this
    * throws), while everything inside {@link #attemptPayuRefund} corresponds to {@code
    * Utilities.getOrderRefundedForNoOrder} — swallowed internally, never propagated — so the row is
-   * marked handled unconditionally once that call returns, matching the source's unconditional
-   * {@code existingCheckSumRecord.setOrderCreated(true)} after it.
+   * still marked handled once that call returns, matching the source's unconditional {@code
+   * existingCheckSumRecord.setOrderCreated(true)} after it. As with the Paytm branch, the outcome
+   * returned to the caller is truthful even though the DB write is not: {@code attemptPayuRefund}
+   * returning {@code null} is reported as {@code FAILED}.
    */
   private PaymentRefundRowResult fallBackToPayuRefund(
       ChecksumRequestEntity row, String paymentSourceId, PayuVerifyResult verify) {
@@ -355,8 +367,10 @@ public class PaymentRefundOrderCreationService {
     payuTransactionsRepository.save(existing);
 
     String resultStatus = attemptPayuRefund(row, paymentSourceId, existing, verify);
-    markRowHandled(row.getId(), "Refund From Scheduler");
-    return new PaymentRefundRowResult(row.getId(), PaymentRefundRowOutcome.REFUND_ISSUED, resultStatus);
+    checksumRowWriter.markHandled(row.getId(), "Refund From Scheduler");
+    PaymentRefundRowOutcome outcome =
+        resultStatus == null ? PaymentRefundRowOutcome.FAILED : PaymentRefundRowOutcome.REFUND_ISSUED;
+    return new PaymentRefundRowResult(row.getId(), outcome, resultStatus);
   }
 
   /**
@@ -364,6 +378,14 @@ public class PaymentRefundOrderCreationService {
    * (full {@link BeanUtils#copyProperties} of {@code existing}, matching the source rather than a
    * hand-picked field subset), the refund-notice SMS, and the {@code tbl_order_refunded} write.
    * Catches and swallows everything, matching the source.
+   *
+   * <p>The amount PayU is asked to refund is parsed into a {@link BigDecimal} and — critically —
+   * the {@link PayuVerificationClient#refund} call is given the exact original decimal string, not
+   * a value rounded through a {@code float}/{@code int}. Rounding before sending is what causes
+   * PayU to reject the request (a rounded-up amount can exceed what's actually refundable) or
+   * silently short-change the customer by the rounded-off paise. If the amount can't be parsed at
+   * all (blank, non-numeric), the PayU call is never made — an unparseable amount is treated as an
+   * immediate failure rather than sent to the gateway as a guess.
    */
   private String attemptPayuRefund(
       ChecksumRequestEntity row,
@@ -371,14 +393,16 @@ public class PaymentRefundOrderCreationService {
       PayuTransactionsEntity existing,
       PayuVerifyResult verify) {
     try {
-      int amount = parseAmount(verify.getTransactionAmount());
-      PayuRefundResult refund = payuVerificationClient.refund(verify.getMihpayid(), amount);
+      String rawAmount = verify.getTransactionAmount();
+      BigDecimal amount = new BigDecimal(rawAmount);
+
+      PayuRefundResult refund = payuVerificationClient.refund(verify.getMihpayid(), rawAmount);
 
       PayuTransactionsEntity refundCopy = new PayuTransactionsEntity();
       BeanUtils.copyProperties(existing, refundCopy);
       refundCopy.setId(null);
       refundCopy.setRefundStatus(refund.getResultStatus());
-      refundCopy.setRefund_amount(String.valueOf(amount));
+      refundCopy.setRefund_amount(rawAmount);
       // Same uniqueId the outbound PayU refund call used (var2) — not a fresh timestamp, or this
       // audit row could never be correlated back to the actual request PayU received.
       refundCopy.setRefundUniqueId(String.valueOf(refund.getUniqueId()));
@@ -388,7 +412,7 @@ public class PaymentRefundOrderCreationService {
       payuTransactionsRepository.save(refundCopy);
 
       if (refund.isRefunded()) {
-        notifyRefundOutcome(row.getUserId(), true, String.valueOf(amount));
+        notifyRefundOutcome(row.getUserId(), true, rawAmount);
       } else {
         notifyRefundOutcome(row.getUserId(), false, null);
       }
@@ -398,7 +422,7 @@ public class PaymentRefundOrderCreationService {
           verify.getMihpayid(),
           refund.getResultStatus(),
           refund.isRefunded(),
-          (long) amount,
+          roundToWholeRupees(amount),
           "Refund from shedular");
       return refund.getResultStatus();
     } catch (Exception e) {
@@ -458,18 +482,6 @@ public class PaymentRefundOrderCreationService {
         new OtpVerificationRequest(customer.getMobile(), userOtp.getMobile_otp()));
   }
 
-  @Transactional
-  void markRowHandled(Long checksumId, String createdFrom) {
-    checksumRequestRepository
-        .findById(checksumId)
-        .ifPresent(
-            row -> {
-              row.setOrderCreated(true);
-              row.setCreatedFrom(createdFrom);
-              checksumRequestRepository.save(row);
-            });
-  }
-
   private void saveOrderRefunded(
       ChecksumRequestEntity row,
       String transferId,
@@ -491,11 +503,26 @@ public class PaymentRefundOrderCreationService {
     orderRefundedRepository.save(refundRow);
   }
 
-  private static int parseAmount(String amount) {
+  /**
+   * {@code tbl_order_refunded.txnAmount} is a {@code Long} column, so some rounding to whole
+   * rupees is unavoidable here — unlike the amount sent to PayU's refund API, which must stay the
+   * exact string PayU reported (see {@link #attemptPayuRefund}). Uses {@link BigDecimal} rather
+   * than {@code float}/{@code Math.round}, which loses precision past ~7 significant digits and
+   * rounds via binary-float approximation rather than decimal rules.
+   */
+  private static Long roundToWholeRupees(String amount) {
     if (amount == null) {
-      return 0;
+      return 0L;
     }
-    return Math.round(Float.parseFloat(amount));
+    try {
+      return roundToWholeRupees(new BigDecimal(amount));
+    } catch (NumberFormatException e) {
+      return 0L;
+    }
+  }
+
+  private static Long roundToWholeRupees(BigDecimal amount) {
+    return amount.setScale(0, RoundingMode.HALF_UP).longValueExact();
   }
 
   private static String randomNumericString(int length) {

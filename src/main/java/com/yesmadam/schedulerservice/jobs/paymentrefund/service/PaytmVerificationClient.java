@@ -110,7 +110,15 @@ public class PaytmVerificationClient {
       JsonNode json = objectMapper.readTree(response);
       String resultStatus = json.path("body").path("resultInfo").path("resultStatus").asText();
       String refundedAmount = json.path("body").path("refundAmount").asText(refundAmount);
-      boolean refunded = !"TXN_FAILURE".equalsIgnoreCase(resultStatus);
+      // Allow-list the known success status rather than the source's "anything but TXN_FAILURE"
+      // check: JsonNode.path() on a missing/malformed field returns "" via MissingNode.asText(),
+      // and "" != "TXN_FAILURE" — so any 200 response whose body doesn't match the expected shape
+      // was being reported as a successful refund. Mirrors PayuVerificationClient.refund, which
+      // already allow-lists known success codes and defaults to failure. TXN_SUCCESS is Paytm's
+      // one well-documented refund-success status; PENDING may also be a legitimate in-progress
+      // status but isn't confirmed, so it's deliberately treated as not-yet-refunded (Case 3, safe
+      // direction) rather than guessed into the success list.
+      boolean refunded = "TXN_SUCCESS".equalsIgnoreCase(resultStatus);
       return new PaytmRefundResult(refunded, resultStatus, refundedAmount);
     } catch (Exception e) {
       log.error("event=paytm_refund_failed order_id={} error={}", orderId, e.getMessage());

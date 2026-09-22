@@ -101,8 +101,15 @@ public class PayuVerificationClient {
     }
   }
 
-  /** Ports the {@code paymentGateway == "payu"} branch of {@code getOrderRefundedForNoOrder}. */
-  public PayuRefundResult refund(String mihpayid, int amount) {
+  /**
+   * Ports the {@code paymentGateway == "payu"} branch of {@code getOrderRefundedForNoOrder}.
+   *
+   * @param amount the exact decimal string PayU reported for this transaction (e.g. from {@code
+   *     PayuVerifyResult.getTransactionAmount()}), forwarded verbatim as {@code var3} — never
+   *     rounded through a float/int, which could send PayU an amount larger than what's actually
+   *     refundable (rejected) or smaller (short-changing the customer).
+   */
+  public PayuRefundResult refund(String mihpayid, String amount) {
     long uniqueId = System.currentTimeMillis();
     try {
       String hashInput =
