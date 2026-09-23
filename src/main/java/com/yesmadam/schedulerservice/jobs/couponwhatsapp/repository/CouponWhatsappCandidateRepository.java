@@ -20,6 +20,7 @@ public interface CouponWhatsappCandidateRepository extends JpaRepository<Order, 
       value =
           """
     select cc.id                as claimId,
+           cc.coupon_id         as couponId,
            cc.order_id          as orderId,
            cc.user_id           as userId,
            u.mobile             as mobile,

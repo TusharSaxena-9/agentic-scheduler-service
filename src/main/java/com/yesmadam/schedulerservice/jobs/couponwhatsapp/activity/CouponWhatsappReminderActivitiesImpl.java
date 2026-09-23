@@ -77,6 +77,7 @@ public class CouponWhatsappReminderActivitiesImpl implements CouponWhatsappRemin
   private CouponWhatsappMessage toMessage(CouponWhatsappCandidateProjection c) {
     return new CouponWhatsappMessage(
         c.getClaimId(),
+        c.getCouponId(),
         c.getOrderId(),
         c.getUserId(),
         c.getMobile(),

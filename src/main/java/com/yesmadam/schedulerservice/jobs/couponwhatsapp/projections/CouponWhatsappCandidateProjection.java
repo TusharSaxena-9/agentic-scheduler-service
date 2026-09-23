@@ -7,6 +7,8 @@ public interface CouponWhatsappCandidateProjection {
 
   Long getClaimId();
 
+  Integer getCouponId();
+
   Long getOrderId();
 
   Long getUserId();
