@@ -46,7 +46,9 @@ public class PayuVerificationClient {
     this.restTemplate =
         restTemplateBuilder
             .setConnectTimeout(Duration.ofSeconds(5))
-            .setReadTimeout(Duration.ofSeconds(15))
+            // Matches AppServerOrderClient's timeout so all three gateway calls in one activity
+            // attempt share the same budget assumption (see PaymentRefundWorkflowImpl).
+            .setReadTimeout(Duration.ofSeconds(45))
             .build();
   }
 

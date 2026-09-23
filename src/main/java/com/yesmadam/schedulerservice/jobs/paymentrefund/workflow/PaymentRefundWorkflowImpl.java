@@ -38,13 +38,24 @@ public class PaymentRefundWorkflowImpl implements PaymentRefundWorkflow {
               .build(),
           Map.of(
               "ProcessChecksumRow",
-              // Outbound-send profile: Paytm/PayU/app-server HTTP calls per row. The idempotency
-              // checks inside the service make a retry of one row safe, EXCEPT the PayU refund gap
-              // documented on PaymentRefundOrderCreationService.
+              // Outbound-send profile: up to three sequential gateway calls per row (PayU/Paytm
+              // verify, OTP verify, create-order), each with a 45s read timeout (bumped from 15s
+              // — create-order in particular is a heavy synchronous endpoint that can genuinely
+              // take longer under load). startToClose covers the worst case of all three maxing
+              // out (~135s) with margin.
+              //
+              // maximumAttempts is 2, not the usual 3: the idempotency checks inside the service
+              // make a retry of one row safe for most branches, EXCEPT the PayU refund gap
+              // documented on PaymentRefundOrderCreationService — a Temporal-level retry of this
+              // activity is exactly what can trigger a double-refund-attempt if a crash happens
+              // between a gateway call succeeding and the local write committing. Fewer retries
+              // is the safer default here, not just a budget saving; in practice this retry
+              // rarely fires at all, since processRow already converts ordinary failures into a
+              // normal return value instead of throwing.
               ActivityOptions.newBuilder()
-                  .setStartToCloseTimeout(Duration.ofMinutes(1))
-                  .setScheduleToCloseTimeout(Duration.ofMinutes(5))
-                  .setRetryOptions(RetryOptions.newBuilder().setMaximumAttempts(3).build())
+                  .setStartToCloseTimeout(Duration.ofMinutes(3))
+                  .setScheduleToCloseTimeout(Duration.ofMinutes(6))
+                  .setRetryOptions(RetryOptions.newBuilder().setMaximumAttempts(2).build())
                   .build()));
 
   @Override

@@ -117,6 +117,18 @@ class PaymentRefundOrderCreationServiceTest {
     return response;
   }
 
+  /**
+   * A clean, definitive "no" from app-server — distinct from {@code null}, which now means the
+   * call itself didn't complete (timeout/IO error) and defers to the next tick instead of
+   * falling back to a refund. Tests exercising the fallback-refund path need this, not {@code
+   * null}.
+   */
+  private static AppServerApiResponse failedCreateOrderResponse() {
+    AppServerApiResponse response = new AppServerApiResponse();
+    response.setStatus("failed");
+    return response;
+  }
+
   // --- already-handled short-circuits ---
 
   @Test
@@ -267,6 +279,32 @@ class PaymentRefundOrderCreationServiceTest {
   }
 
   @Test
+  void processRow_createOrderCallTimesOut_defersToNextTickInsteadOfRefunding() {
+    // AppServerOrderClient itself catches the timeout/IO error and returns null — the caller
+    // cannot tell "app-server said no" from "we don't know, it might still create the order a
+    // moment later" without this distinction, and refunding on the latter risks clawing back
+    // money for a transaction that's about to become a fulfilled order (seen for real in UAT).
+    when(checksumRequestRepository.findById(CHECKSUM_ID))
+        .thenReturn(Optional.of(row("Service", "payu")));
+    when(orderRepository.existsByPaymentSourceIdAndPaymentSourceIn(eq(PAYMENT_SOURCE_ID), any()))
+        .thenReturn(false);
+    when(orderRefundedRepository.existsByTransferId(PAYMENT_SOURCE_ID)).thenReturn(false);
+    when(payuVerificationClient.verifyPayment(PAYMENT_SOURCE_ID))
+        .thenReturn(new PayuVerifyResult("success", "now", "mihpay-1", "500", "CC", "{}"));
+    when(userRepository.findById(USER_ID)).thenReturn(Optional.of(customer()));
+    when(appServerOrderClient.verifyOtpAndGetBearerToken(any())).thenReturn("Bearer token");
+    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(null);
+
+    PaymentRefundRowResult result = service.processRow(CHECKSUM_ID);
+
+    assertThat(result.getOutcome()).isEqualTo(PaymentRefundRowOutcome.FAILED);
+    verify(checksumRowWriter, never()).markHandled(any(), any());
+    verify(payuVerificationClient, never()).refund(anyString(), anyString());
+    verify(orderRefundedRepository, never()).save(any());
+    verify(whatsappClient, never()).sendRefundPending(any(), any());
+  }
+
+  @Test
   void processRow_payuNotYetSuccessful_leavesRowPendingForNextTick() {
     when(checksumRequestRepository.findById(CHECKSUM_ID))
         .thenReturn(Optional.of(row("Service", "payu")));
@@ -296,7 +334,8 @@ class PaymentRefundOrderCreationServiceTest {
         .thenReturn(new PayuVerifyResult("success", "now", "mihpay-1", "1299.50", "CC", "{}"));
     when(userRepository.findById(USER_ID)).thenReturn(Optional.of(customer()));
     when(appServerOrderClient.verifyOtpAndGetBearerToken(any())).thenReturn("Bearer token");
-    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(null);
+    when(appServerOrderClient.createOrder(any(), eq("Bearer token")))
+        .thenReturn(failedCreateOrderResponse());
     when(payuTransactionsRepository.findFirstByOrderIdOrderByIdDesc(PAYMENT_SOURCE_ID))
         .thenReturn(new PayuTransactionsEntity());
     when(payuVerificationClient.refund(eq("mihpay-1"), eq("1299.50")))
@@ -332,7 +371,8 @@ class PaymentRefundOrderCreationServiceTest {
         .thenReturn(new PayuVerifyResult("success", "now", "mihpay-1", "500", "CC", "{}"));
     when(userRepository.findById(USER_ID)).thenReturn(Optional.of(customer()));
     when(appServerOrderClient.verifyOtpAndGetBearerToken(any())).thenReturn("Bearer token");
-    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(null);
+    when(appServerOrderClient.createOrder(any(), eq("Bearer token")))
+        .thenReturn(failedCreateOrderResponse());
 
     PaymentRefundRowResult result = service.processRow(CHECKSUM_ID);
 
@@ -357,7 +397,8 @@ class PaymentRefundOrderCreationServiceTest {
         .thenReturn(new PayuVerifyResult("success", "now", "mihpay-1", "", "CC", "{}"));
     when(userRepository.findById(USER_ID)).thenReturn(Optional.of(customer()));
     when(appServerOrderClient.verifyOtpAndGetBearerToken(any())).thenReturn("Bearer token");
-    when(appServerOrderClient.createOrder(any(), eq("Bearer token"))).thenReturn(null);
+    when(appServerOrderClient.createOrder(any(), eq("Bearer token")))
+        .thenReturn(failedCreateOrderResponse());
     when(payuTransactionsRepository.findFirstByOrderIdOrderByIdDesc(PAYMENT_SOURCE_ID))
         .thenReturn(new PayuTransactionsEntity());
 

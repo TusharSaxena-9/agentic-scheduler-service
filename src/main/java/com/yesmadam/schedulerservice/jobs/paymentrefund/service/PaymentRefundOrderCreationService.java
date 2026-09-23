@@ -262,6 +262,7 @@ public class PaymentRefundOrderCreationService {
     }
 
     AppServerApiResponse createOrderResponse = null;
+    boolean createOrderCallAttempted = false;
     try {
       Map<String, Object> orderRequest =
           objectMapper.readValue(row.getOrderRequestText(), Map.class);
@@ -269,6 +270,7 @@ public class PaymentRefundOrderCreationService {
 
       String bearerToken = verifyOtpAndGetBearerToken(row.getUserId());
       if (bearerToken != null) {
+        createOrderCallAttempted = true;
         createOrderResponse = appServerOrderClient.createOrder(orderRequest, bearerToken);
       }
     } catch (Exception e) {
@@ -285,6 +287,26 @@ public class PaymentRefundOrderCreationService {
       notifyBookingCreated(row.getUserId(), createOrderResponse.getObject());
       return new PaymentRefundRowResult(row.getId(), PaymentRefundRowOutcome.ORDER_CREATED, null);
     }
+
+    if (createOrderCallAttempted && createOrderResponse == null) {
+      // The create-order HTTP call itself didn't complete (timeout/IO error) — AppServerOrderClient
+      // caught the exception and returned null, meaning we genuinely don't know app-server's
+      // disposition. Its own request keeps running server-side after our client gives up waiting
+      // (seen in UAT: a create-order call outlasting our read timeout, with the order actually
+      // landing moments later on app-server's side). Refunding now risks clawing back money for a
+      // transaction that's about to become a fulfilled order. Leave the row unmarked rather than
+      // falling back to a refund — the next tick's existsByPaymentSourceIdAndPaymentSourceIn check
+      // resolves this cleanly either way once app-server's request has actually finished.
+      log.error(
+          "event=payu_create_order_inconclusive checksum_id={} payment_source_id={}",
+          row.getId(),
+          paymentSourceId);
+      return new PaymentRefundRowResult(
+          row.getId(),
+          PaymentRefundRowOutcome.FAILED,
+          "create-order call did not complete (timeout/IO error); deferring to next tick before refunding");
+    }
+
     return fallBackToPayuRefund(row, paymentSourceId, verify);
   }
 

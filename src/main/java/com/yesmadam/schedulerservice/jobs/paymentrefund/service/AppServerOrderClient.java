@@ -44,7 +44,12 @@ public class AppServerOrderClient {
     this.restTemplate =
         restTemplateBuilder
             .setConnectTimeout(Duration.ofSeconds(5))
-            .setReadTimeout(Duration.ofSeconds(15))
+            // create-order is a heavy synchronous endpoint (OTP verify, slot/address validation,
+            // coupon logic, order persistence) — seen in UAT genuinely taking longer than 15s
+            // under load. A short timeout here doesn't fail safely: it just makes this job treat
+            // an in-flight create-order as "definitely not created" while app-server may still be
+            // about to create it (see processPayuRow's create-order-inconclusive handling).
+            .setReadTimeout(Duration.ofSeconds(45))
             .build();
   }
 
