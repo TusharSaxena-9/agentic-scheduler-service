@@ -22,4 +22,8 @@ public interface CouponWhatsappCandidateProjection {
   String getCodeSnapshot();
 
   Timestamp getExpiryAt();
+
+  String getBrandSubtext();
+
+  String getBrandUrl();
 }

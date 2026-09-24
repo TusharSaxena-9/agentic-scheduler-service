@@ -84,7 +84,9 @@ public class CouponWhatsappReminderActivitiesImpl implements CouponWhatsappRemin
         c.getCustomerName(),
         c.getBrandName(),
         c.getCodeSnapshot(),
-        c.getExpiryAt() != null ? c.getExpiryAt().getTime() : null);
+        c.getExpiryAt() != null ? c.getExpiryAt().getTime() : null,
+        c.getBrandSubtext(),
+        c.getBrandUrl());
   }
 
   private String resolveQueueUrl() {

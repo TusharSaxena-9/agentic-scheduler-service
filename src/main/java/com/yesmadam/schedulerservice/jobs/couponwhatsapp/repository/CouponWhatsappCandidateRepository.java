@@ -27,7 +27,9 @@ public interface CouponWhatsappCandidateRepository extends JpaRepository<Order, 
            u.name               as customerName,
            cs.brand_name        as brandName,
            cc.code_snapshot     as codeSnapshot,
-           cc.expiry_at         as expiryAt
+           cc.expiry_at         as expiryAt,
+           cs.brand_subtext     as brandSubtext,
+           cs.brand_url         as brandUrl
     from ysmdm_users.tbl_coupon_claim cc
     join ysmdm_users.tbl_order o on o.order_id = cc.order_id
     join ysmdm_users.tbl_user u on u.user_id = cc.user_id
