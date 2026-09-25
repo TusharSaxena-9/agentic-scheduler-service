@@ -161,6 +161,21 @@ scheduler:
       owner: platform
       description: Alert by mail and WhatsApp when configured hub/product live stock drops to zero
 
+    - name: rain-delay-notification
+      workflow: com.yesmadam.schedulerservice.jobs.raindelay.RainDelayWorkflow
+      tier: standard
+      # Every 30 minutes, all day. Each run covers the NON-OVERLAPPING tile
+      cron: "*/30 * * * *"
+      jitter: PT0S
+      catchup-window: PT15M
+      overlap: SCHEDULE_OVERLAP_POLICY_BUFFER_ONE
+      run-timeout: PT25M
+      pause-on-failure: true
+      # Needs: rainHub row, WEATHER_API_KEY (WeatherAPI.com) and the WhatsApp template.
+      enabled: false
+      owner: platform
+      description: Push a rain-delay heads-up via CleverTap to customers whose booking starts in this run's 30-minute slot at a rainy configured hub
+
     - name: rose-order-eligible-sp-pool
       workflow: com.yesmadam.schedulerservice.jobs.roseorder.workflow.RoseOrderEligibleSpPoolWorkflow
       tier: heavy

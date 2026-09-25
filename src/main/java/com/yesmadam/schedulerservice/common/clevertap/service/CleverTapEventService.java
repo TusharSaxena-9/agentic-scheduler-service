@@ -26,20 +26,36 @@ public class CleverTapEventService {
   private final RestTemplate restTemplate;
   private final String accountId;
   private final String passcode;
+  private final String userAccountId;
+  private final String userPasscode;
   private final String uploadUrl;
 
   public CleverTapEventService(
       RestTemplate restTemplate,
       @Value("${cleaver.tap.product.id:RK4-W96-WR7Z}") String accountId,
       @Value("${cleaver.tap.passcode:EHA-QUY-YWEL}") String passcode,
+      @Value("${cleaver.tap.user.product.id:}") String userAccountId,
+      @Value("${cleaver.tap.user.passcode:}") String userPasscode,
       @Value("${cleaver.tap.url:https://in1.api.clevertap.com/1/upload}") String uploadUrl) {
     this.restTemplate = restTemplate;
     this.accountId = requireConfigured("cleaver.tap.product.id", accountId);
     this.passcode = requireConfigured("cleaver.tap.passcode", passcode);
+    this.userAccountId = requireConfigured("cleaver.tap.user.product.id", userAccountId);
+    this.userPasscode = requireConfigured("cleaver.tap.user.passcode", userPasscode);
     this.uploadUrl = requireConfigured("cleaver.tap.url", uploadUrl);
   }
 
+  /** Uploads to the SP/employee CleverTap project. */
   public int sendEvents(List<CleverTapEvent> events) {
+    return upload(events, accountId, passcode, "sp");
+  }
+
+  public int sendUserEvents(List<CleverTapEvent> events) {
+    return upload(events, userAccountId, userPasscode, "user");
+  }
+
+  private int upload(
+      List<CleverTapEvent> events, String acct, String pass, String audience) {
     if (events == null || events.isEmpty()) {
       return 0;
     }
@@ -53,8 +69,8 @@ public class CleverTapEventService {
     }
 
     HttpHeaders headers = new HttpHeaders();
-    headers.add("X-CleverTap-Account-Id", accountId);
-    headers.add("X-CleverTap-Passcode", passcode);
+    headers.add("X-CleverTap-Account-Id", acct);
+    headers.add("X-CleverTap-Passcode", pass);
     headers.setContentType(MediaType.APPLICATION_JSON);
 
     HttpEntity<CleverTapUploadRequest> request =
@@ -65,14 +81,16 @@ public class CleverTapEventService {
           restTemplate.postForEntity(uploadUrl, request, String.class);
 
       log.info(
-          "event=clevertap_uploaded count={} status={} body={}",
+          "event=clevertap_uploaded audience={} count={} status={} body={}",
+          audience,
           events.size(),
           response.getStatusCode(),
           response.getBody());
       return events.size();
     } catch (HttpStatusCodeException e) {
       log.error(
-          "event=clevertap_upload_failed count={} status={} body={}",
+          "event=clevertap_upload_failed audience={} count={} status={} body={}",
+          audience,
           events.size(),
           e.getRawStatusCode(),
           e.getResponseBodyAsString());
@@ -80,7 +98,11 @@ public class CleverTapEventService {
           "CleverTap upload of " + events.size() + " events returned " + e.getRawStatusCode(),
           e.getRawStatusCode());
     } catch (RuntimeException e) {
-      log.error("event=clevertap_upload_failed count={} error={}", events.size(), e.getMessage());
+      log.error(
+          "event=clevertap_upload_failed audience={} count={} error={}",
+          audience,
+          events.size(),
+          e.getMessage());
       throw new CleverTapException("CleverTap upload of " + events.size() + " events failed", e);
     }
   }
