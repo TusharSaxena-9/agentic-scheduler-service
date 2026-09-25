@@ -72,11 +72,7 @@ public class RainDelayService {
   @Value("${raindelay.clevertap.body}")
   private String pushBody;
 
-  /** Prefixed to the numeric order id to form the customer-facing booking id, e.g. {@code YM}. */
-  @Value("${raindelay.booking-id-prefix}")
-  private String bookingIdPrefix;
-
-  /** Deep link base; the booking id is appended. {@code yesmadam://booking/}. */
+  /** Deep link base; the order id is appended. {@code https://www.yesmadam.com/?deeplinkCode=27&orderId=}. */
   @Value("${raindelay.deeplink-prefix}")
   private String deeplinkPrefix;
 
@@ -264,9 +260,6 @@ public class RainDelayService {
       try {
         sent += cleverTapEventService.sendUserEvents(events);
       } catch (RuntimeException e) {
-        // A chunk is all-or-nothing, but a later chunk may still succeed — a provider blip must not
-        // cost every customer in the slot. Not rethrown: the activity runs with maximumAttempts(1),
-        // so there is no retry, and failing here would only hide the chunks that did land.
         failed += chunk.size();
         log.error(
             "event=rain_delay_push_chunk_failed size={} error={}", chunk.size(), e.getMessage());
@@ -284,14 +277,14 @@ public class RainDelayService {
    * tap goes nowhere. {@code RainDelayServiceTest} pins them for that reason.
    */
   private Map<String, Object> evtData(RainDelayTarget target) {
-    String bookingId = bookingIdPrefix + target.getOrderId();
+    String orderId = String.valueOf(target.getOrderId());
     Map<String, Object> evtData = new LinkedHashMap<>();
     evtData.put("msgTitle", pushTitle);
     evtData.put("msgBody", pushBody);
     evtData.put("type", "rain_delay");
-    evtData.put("booking_id", bookingId);
+    evtData.put("booking_id", orderId);
     // Lands the customer on live booking status rather than the app home screen.
-    evtData.put("deeplink", deeplinkPrefix + bookingId);
+    evtData.put("deeplink", deeplinkPrefix + orderId);
     return evtData;
   }
 

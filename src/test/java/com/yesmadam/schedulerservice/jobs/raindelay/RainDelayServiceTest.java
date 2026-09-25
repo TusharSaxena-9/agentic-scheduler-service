@@ -60,8 +60,8 @@ class RainDelayServiceTest {
     ReflectionTestUtils.setField(service, "eventName", "Rain_Delay_Push");
     ReflectionTestUtils.setField(service, "pushTitle", "Rain in your area");
     ReflectionTestUtils.setField(service, "pushBody", "Your professional may be slightly delayed.");
-    ReflectionTestUtils.setField(service, "bookingIdPrefix", "YM");
-    ReflectionTestUtils.setField(service, "deeplinkPrefix", "yesmadam://booking/");
+    ReflectionTestUtils.setField(
+        service, "deeplinkPrefix", "https://www.yesmadam.com/?deeplinkCode=27&orderId=");
   }
 
   // ---------------------------------------------------------------- resolveRainyHubs
@@ -385,8 +385,9 @@ class RainDelayServiceTest {
     assertThat(data)
         .containsEntry("msgTitle", "Rain in your area")
         .containsEntry("type", "rain_delay")
-        .containsEntry("booking_id", "YM123456")
-        .containsEntry("deeplink", "yesmadam://booking/YM123456");
+        .containsEntry("booking_id", "123456")
+        .containsEntry(
+            "deeplink", "https://www.yesmadam.com/?deeplinkCode=27&orderId=123456");
     assertThat(data).containsKey("msgBody");
   }
 
