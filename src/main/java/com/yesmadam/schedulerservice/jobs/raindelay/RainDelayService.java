@@ -52,7 +52,7 @@ public class RainDelayService {
    * missing, blank or unparseable. 2.5 is the conventional light/moderate boundary — below it is
    * drizzle, and firing on drizzle trains customers to ignore the notification.
    */
-  static final BigDecimal DEFAULT_PRECIP_THRESHOLD_MM = BigDecimal.valueOf(2.5);
+  static final BigDecimal DEFAULT_PRECIP_THRESHOLD_MM = BigDecimal.valueOf(1);
 
   /** CleverTap's {@code /1/upload} ceiling; {@code CleverTapEventService} throws above it. */
   private static final int CLEVERTAP_EVENTS_PER_UPLOAD = 1000;

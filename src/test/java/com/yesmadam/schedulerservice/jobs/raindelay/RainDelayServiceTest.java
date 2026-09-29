@@ -229,7 +229,7 @@ class RainDelayServiceTest {
 
     // Zero would make every reading rain risk and message every customer at every configured hub.
     verify(weatherClient)
-        .weatherAt(eq(4), anyString(), anyString(), eq(2.5));
+        .weatherAt(eq(4), anyString(), anyString(), eq(1.0));
   }
 
   @Test
@@ -245,7 +245,7 @@ class RainDelayServiceTest {
 
     service.resolveRainyHubs(TEN_AM);
 
-    verify(weatherClient).weatherAt(eq(4), anyString(), anyString(), eq(2.5));
+    verify(weatherClient).weatherAt(eq(4), anyString(), anyString(), eq(1.0));
   }
 
   @Test
