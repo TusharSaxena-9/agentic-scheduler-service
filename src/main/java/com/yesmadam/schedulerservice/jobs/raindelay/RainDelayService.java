@@ -49,10 +49,9 @@ public class RainDelayService {
 
   /**
    * Fallback rain-risk bar in mm, applied when the {@code RAIN_PRECIP_MM_THRESHOLD} settings row is
-   * missing, blank or unparseable. 2.5 is the conventional light/moderate boundary — below it is
-   * drizzle, and firing on drizzle trains customers to ignore the notification.
+   * missing, blank or unparseable.
    */
-  static final BigDecimal DEFAULT_PRECIP_THRESHOLD_MM = BigDecimal.valueOf(0.01);
+  static final BigDecimal DEFAULT_PRECIP_THRESHOLD_MM = BigDecimal.valueOf(0.0);
 
   /** CleverTap's {@code /1/upload} ceiling; {@code CleverTapEventService} throws above it. */
   private static final int CLEVERTAP_EVENTS_PER_UPLOAD = 1000;
