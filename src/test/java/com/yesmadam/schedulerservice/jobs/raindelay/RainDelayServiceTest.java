@@ -215,8 +215,8 @@ class RainDelayServiceTest {
   }
 
   @Test
-  @DisplayName("a zero threshold is accepted, so every reading counts as rain")
-  void zeroThresholdIsAccepted() {
+  @DisplayName("a zero threshold falls back to the default instead of flagging every hub")
+  void nonPositiveThresholdFallsBack() {
     Map<String, SettingsForEnalbeDisable> cfg = new LinkedHashMap<>(settings("4"));
     cfg.put("RAIN_PRECIP_MM_THRESHOLD", setting("RAIN_PRECIP_MM_THRESHOLD", "0"));
     when(settingService.findSettingWithKeys(anyList())).thenReturn(cfg);
@@ -227,26 +227,9 @@ class RainDelayServiceTest {
 
     service.resolveRainyHubs(TEN_AM);
 
-    // Zero is allowed on purpose (testing on a dry day): precip_mm >= 0 is always true.
+    // Zero would make every reading rain risk and message every customer at every configured hub.
     verify(weatherClient)
-        .weatherAt(eq(4), anyString(), anyString(), eq(0.0));
-  }
-
-  @Test
-  @DisplayName("a negative threshold falls back to the default")
-  void negativeThresholdFallsBack() {
-    Map<String, SettingsForEnalbeDisable> cfg = new LinkedHashMap<>(settings("4"));
-    cfg.put("RAIN_PRECIP_MM_THRESHOLD", setting("RAIN_PRECIP_MM_THRESHOLD", "-1"));
-    when(settingService.findSettingWithKeys(anyList())).thenReturn(cfg);
-    when(reader.findCandidateHubs(anyList(), any(), any()))
-        .thenReturn(List.of(candidate(4, "Dwarka", "28.61", "77.20", 1L)));
-    when(weatherClient.weatherAt(anyInt(), anyString(), anyString(), anyDouble()))
-        .thenReturn(HubWeather.CLEAR);
-
-    service.resolveRainyHubs(TEN_AM);
-
-    verify(weatherClient)
-        .weatherAt(eq(4), anyString(), anyString(), eq(RainDelayService.DEFAULT_PRECIP_THRESHOLD_MM.doubleValue()));
+        .weatherAt(eq(4), anyString(), anyString(), eq(2.5));
   }
 
   @Test
@@ -262,7 +245,7 @@ class RainDelayServiceTest {
 
     service.resolveRainyHubs(TEN_AM);
 
-    verify(weatherClient).weatherAt(eq(4), anyString(), anyString(), eq(RainDelayService.DEFAULT_PRECIP_THRESHOLD_MM.doubleValue()));
+    verify(weatherClient).weatherAt(eq(4), anyString(), anyString(), eq(2.5));
   }
 
   @Test

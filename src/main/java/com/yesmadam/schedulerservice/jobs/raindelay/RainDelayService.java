@@ -45,13 +45,14 @@ public class RainDelayService {
    * equality is what makes consecutive windows tile with no gap and no overlap. Change one and you
    * must change the other, or orders fall between runs and are never notified.
    */
-  static final int WINDOW_LENGTH_MINUTES = 300;
+  static final int WINDOW_LENGTH_MINUTES = 30;
 
   /**
    * Fallback rain-risk bar in mm, applied when the {@code RAIN_PRECIP_MM_THRESHOLD} settings row is
-   * missing, blank or unparseable.
+   * missing, blank or unparseable. 2.5 is the conventional light/moderate boundary — below it is
+   * drizzle, and firing on drizzle trains customers to ignore the notification.
    */
-  static final BigDecimal DEFAULT_PRECIP_THRESHOLD_MM = BigDecimal.valueOf(0.0);
+  static final BigDecimal DEFAULT_PRECIP_THRESHOLD_MM = BigDecimal.valueOf(2.5);
 
   /** CleverTap's {@code /1/upload} ceiling; {@code CleverTapEventService} throws above it. */
   private static final int CLEVERTAP_EVENTS_PER_UPLOAD = 1000;
@@ -257,7 +258,7 @@ public class RainDelayService {
       List<CleverTapEvent> events = new ArrayList<>(chunk.size());
       for (RainDelayTarget target : chunk) {
         events.add(
-            CleverTapEvent.of("4621955", eventName, evtData(target)));
+            CleverTapEvent.of(String.valueOf(target.getUserId()), eventName, evtData(target)));
       }
       try {
         sent += cleverTapEventService.sendUserEvents(events);
@@ -290,16 +291,15 @@ public class RainDelayService {
   }
 
   /**
-   * Rain-risk bar from {@code tbl_settings}, falling back on a missing, unparseable or negative
-   * value. Zero is allowed on purpose: {@code precip_mm >= 0} is always true, so every candidate
-   * hub counts as rainy — useful for testing on a dry day, but it messages every customer at every
-   * configured hub, so never leave it at 0 in prod.
+   * Rain-risk bar from {@code tbl_settings}, falling back on a missing, unparseable or
+   * non-positive value. Zero or negative would make every reading rain risk and message every
+   * customer at every configured hub — a fat-fingered value is far likelier than a deliberate one.
    */
   private static double precipThreshold(Map<String, SettingsForEnalbeDisable> cfg) {
     BigDecimal configured =
         SettingConfigUtil.decimalConfig(
             cfg, "RAIN_PRECIP_MM_THRESHOLD", DEFAULT_PRECIP_THRESHOLD_MM);
-    if (configured.signum() >= 0) {
+    if (configured.signum() > 0) {
       return configured.doubleValue();
     }
     log.error(
