@@ -288,15 +288,16 @@ public class RainDelayService {
   }
 
   /**
-   * Rain-risk bar from {@code tbl_settings}, falling back on a missing, unparseable or
-   * non-positive value. Zero or negative would make every reading rain risk and message every
-   * customer at every configured hub — a fat-fingered value is far likelier than a deliberate one.
+   * Rain-risk bar from {@code tbl_settings}, falling back on a missing, unparseable or negative
+   * value. Zero is allowed on purpose: {@code precip_mm >= 0} is always true, so every candidate
+   * hub counts as rainy — useful for testing on a dry day, but it messages every customer at every
+   * configured hub, so never leave it at 0 in prod.
    */
   private static double precipThreshold(Map<String, SettingsForEnalbeDisable> cfg) {
     BigDecimal configured =
         SettingConfigUtil.decimalConfig(
             cfg, "RAIN_PRECIP_MM_THRESHOLD", DEFAULT_PRECIP_THRESHOLD_MM);
-    if (configured.signum() > 0) {
+    if (configured.signum() >= 0) {
       return configured.doubleValue();
     }
     log.error(
