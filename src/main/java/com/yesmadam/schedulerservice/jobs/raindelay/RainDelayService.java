@@ -45,7 +45,7 @@ public class RainDelayService {
    * equality is what makes consecutive windows tile with no gap and no overlap. Change one and you
    * must change the other, or orders fall between runs and are never notified.
    */
-  static final int WINDOW_LENGTH_MINUTES = 30;
+  static final int WINDOW_LENGTH_MINUTES = 300;
 
   /**
    * Fallback rain-risk bar in mm, applied when the {@code RAIN_PRECIP_MM_THRESHOLD} settings row is
