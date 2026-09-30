@@ -400,12 +400,12 @@ class RainDelayServiceTest {
     // These names are a contract with a campaign outside this repo. Rename one and CleverTap still
     // returns 200, but the push renders blank or the tap goes nowhere.
     assertThat(data)
-        .containsEntry("msgTitle", "Rain in your area")
-        .containsEntry("type", "rain_delay")
-        .containsEntry("booking_id", "123456")
-        .containsEntry(
-            "deeplink", "https://www.yesmadam.com/?deeplinkCode=27&orderId=123456");
-    assertThat(data).containsKey("msgBody");
+        .containsExactly(
+            Map.entry("orderId", 123456L),
+            Map.entry("deeplinkCode", "27"),
+            Map.entry("msgTitle", "Rain in your area"),
+            Map.entry("msgBody", "Your professional may be slightly delayed."),
+            Map.entry("deeplink", "https://www.yesmadam.com/?deeplinkCode=27&orderId=123456"));
   }
 
   @Test

@@ -56,6 +56,9 @@ public class RainDelayService {
   /** CleverTap's {@code /1/upload} ceiling; {@code CleverTapEventService} throws above it. */
   private static final int CLEVERTAP_EVENTS_PER_UPLOAD = 1000;
 
+  /** App route for live booking status; must match the {@code deeplinkCode} in the deeplink prefix. */
+  private static final String DEEPLINK_CODE = "27";
+
   /** Explicit zone: the pod's TZ lives in the k8s manifest and is absent on a dev machine. */
   private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
@@ -254,7 +257,7 @@ public class RainDelayService {
       List<CleverTapEvent> events = new ArrayList<>(chunk.size());
       for (RainDelayTarget target : chunk) {
         events.add(
-            CleverTapEvent.of("8785978", eventName, evtData(target)));
+            CleverTapEvent.of("4621955", eventName, evtData(target)));
       }
       try {
         sent += cleverTapEventService.sendUserEvents(events);
@@ -276,14 +279,13 @@ public class RainDelayService {
    * tap goes nowhere. {@code RainDelayServiceTest} pins them for that reason.
    */
   private Map<String, Object> evtData(RainDelayTarget target) {
-    String orderId = String.valueOf(target.getOrderId());
     Map<String, Object> evtData = new LinkedHashMap<>();
+    evtData.put("orderId", target.getOrderId());
+    evtData.put("deeplinkCode", DEEPLINK_CODE);
     evtData.put("msgTitle", pushTitle);
     evtData.put("msgBody", pushBody);
-    evtData.put("type", "rain_delay");
-    evtData.put("booking_id", orderId);
     // Lands the customer on live booking status rather than the app home screen.
-    evtData.put("deeplink", deeplinkPrefix + orderId);
+    evtData.put("deeplink", deeplinkPrefix + target.getOrderId());
     return evtData;
   }
 
