@@ -258,7 +258,7 @@ public class RainDelayService {
       List<CleverTapEvent> events = new ArrayList<>(chunk.size());
       for (RainDelayTarget target : chunk) {
         events.add(
-            CleverTapEvent.of("4621955", eventName, evtData(target)));
+            CleverTapEvent.of("9168482", eventName, evtData(target)));
       }
       try {
         sent += cleverTapEventService.sendUserEvents(events);
@@ -286,7 +286,7 @@ public class RainDelayService {
     evtData.put("msgTitle", pushTitle);
     evtData.put("msgBody", pushBody);
     // Lands the customer on live booking status rather than the app home screen.
-    evtData.put("deeplink", deeplinkPrefix + target.getOrderId());
+    evtData.put("deeplink", deeplinkPrefix + "9911572");
     return evtData;
   }
 
