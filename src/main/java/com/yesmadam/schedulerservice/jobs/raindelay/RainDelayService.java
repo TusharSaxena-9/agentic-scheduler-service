@@ -75,7 +75,7 @@ public class RainDelayService {
   @Value("${raindelay.clevertap.body}")
   private String pushBody;
 
-  /** Deep link base; the order id is appended. {@code https://www.yesmadam.com/?deeplinkCode=27&orderId=}. */
+  /** Deep link base; the order id is appended. {@code https://www.yesmadam.com/share?deeplinkCode=27&orderId=}. */
   @Value("${raindelay.deeplink-prefix}")
   private String deeplinkPrefix;
 

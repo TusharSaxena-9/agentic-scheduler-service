@@ -61,7 +61,7 @@ class RainDelayServiceTest {
     ReflectionTestUtils.setField(service, "pushTitle", "Rain in your area");
     ReflectionTestUtils.setField(service, "pushBody", "Your professional may be slightly delayed.");
     ReflectionTestUtils.setField(
-        service, "deeplinkPrefix", "https://www.yesmadam.com/?deeplinkCode=27&orderId=");
+        service, "deeplinkPrefix", "https://www.yesmadam.com/share?deeplinkCode=27&orderId=");
   }
 
   // ---------------------------------------------------------------- resolveRainyHubs
@@ -388,7 +388,7 @@ class RainDelayServiceTest {
             Map.entry("deeplinkCode", "27"),
             Map.entry("msgTitle", "Rain in your area"),
             Map.entry("msgBody", "Your professional may be slightly delayed."),
-            Map.entry("deeplink", "https://www.yesmadam.com/?deeplinkCode=27&orderId=123456"));
+            Map.entry("deeplink", "https://www.yesmadam.com/share?deeplinkCode=27&orderId=123456"));
   }
 
   @Test
