@@ -258,7 +258,7 @@ public class RainDelayService {
       List<CleverTapEvent> events = new ArrayList<>(chunk.size());
       for (RainDelayTarget target : chunk) {
         events.add(
-            CleverTapEvent.of("9168482", eventName, evtData(target)));
+            CleverTapEvent.of(String.valueOf(target.getUserId()), eventName, evtData(target)));
       }
       try {
         sent += cleverTapEventService.sendUserEvents(events);
