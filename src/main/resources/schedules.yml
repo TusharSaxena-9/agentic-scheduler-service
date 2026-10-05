@@ -71,6 +71,25 @@ scheduler:
       owner: platform
       description: Alert when Android or iOS bookings drop to zero in the trailing window
 
+    - name: commission-audit
+      workflow: com.yesmadam.schedulerservice.jobs.commissionaudit.workflow.CommissionAuditWorkflow
+      tier: standard
+      # Two hours after the cron repo's StopJobAndDeductCommission.DeductCommissionIfAny (03:00), so
+      # this audits that run's result. The target is "after 03:00 has finished", not exactly 05:00,
+      # so the default jitter is fine.
+      cron: "0 5 * * *"
+      # The date audited is always yesterday, so a run a few hours late still reports the same
+      # orders and is still worth sending. After 07:00 it overlaps the working day, so skip it.
+      catchup-window: PT2H
+      # One single-day query plus one mail. Covers the worst case of all retries (fetch 20m +
+      # mail 5m schedule-to-close). Placeholder until a real run has been observed.
+      run-timeout: PT30M
+      # Mails finance. A repeated failure should stop and be looked at rather than keep firing.
+      pause-on-failure: true
+      enabled: false
+      owner: finance
+      description: Mail yesterday's completed orders whose commission was not deducted, or that have no SP
+
     - name: feedback-reminder
       workflow: com.yesmadam.schedulerservice.jobs.order.feedbackreminder.workflow.FeedbackReminderWorkflow
       tier: light
