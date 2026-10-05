@@ -76,18 +76,20 @@ class CleverTapEventServiceTest {
   }
 
   @Test
-  @DisplayName("a blank user credential fails startup, naming the property")
-  void blankUserCredentialFailsStartup() {
-    assertThatThrownBy(
-            () ->
-                new CleverTapEventService(
-                    restTemplate, "ACCOUNT", "PASSCODE", "", "USER_PASSCODE", URL))
+  @DisplayName(
+      "a blank user credential does not fail startup, but fails the first sendUserEvents call")
+  void blankUserCredentialFailsLazilyOnFirstUse() {
+    CleverTapEventService blankAccount =
+        new CleverTapEventService(restTemplate, "ACCOUNT", "PASSCODE", "", "USER_PASSCODE", URL);
+    assertThatThrownBy(() -> blankAccount.sendUserEvents(ONE_EVENT))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("cleaver.tap.user.product.id");
-    assertThatThrownBy(
-            () ->
-                new CleverTapEventService(
-                    restTemplate, "ACCOUNT", "PASSCODE", "USER_ACCOUNT", "  ", URL))
+    verifyNoInteractions(restTemplate);
+
+    CleverTapEventService blankPasscode =
+        new CleverTapEventService(
+            restTemplate, "ACCOUNT", "PASSCODE", "USER_ACCOUNT", "  ", URL);
+    assertThatThrownBy(() -> blankPasscode.sendUserEvents(ONE_EVENT))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("cleaver.tap.user.passcode");
   }
