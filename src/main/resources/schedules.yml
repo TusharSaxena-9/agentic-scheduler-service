@@ -71,6 +71,25 @@ scheduler:
       owner: platform
       description: Alert when Android or iOS bookings drop to zero in the trailing window
 
+    - name: commission-audit
+      workflow: com.yesmadam.schedulerservice.jobs.commissionaudit.workflow.CommissionAuditWorkflow
+      tier: standard
+      # Two hours after the cron repo's StopJobAndDeductCommission.DeductCommissionIfAny (03:00), so
+      # this audits that run's result. The target is "after 03:00 has finished", not exactly 05:00,
+      # so the default jitter is fine.
+      cron: "0 5 * * *"
+      # The date audited is always yesterday, so a run a few hours late still reports the same
+      # orders and is still worth sending. After 07:00 it overlaps the working day, so skip it.
+      catchup-window: PT2H
+      # One single-day query plus one mail. Covers the worst case of all retries (fetch 20m +
+      # mail 5m schedule-to-close). Placeholder until a real run has been observed.
+      run-timeout: PT30M
+      # Mails finance. A repeated failure should stop and be looked at rather than keep firing.
+      pause-on-failure: true
+      enabled: false
+      owner: finance
+      description: Mail yesterday's completed orders whose commission was not deducted, or that have no SP
+
     - name: feedback-reminder
       workflow: com.yesmadam.schedulerservice.jobs.order.feedbackreminder.workflow.FeedbackReminderWorkflow
       tier: light
@@ -103,6 +122,24 @@ scheduler:
       enabled: false
       owner: finance
       description: Expire CREATED/CHARGED order cancellation charges whose expiry window has passed
+
+    - name: ozuzu-order-sync
+      workflow: com.yesmadam.schedulerservice.jobs.ozuzuorder.workflow.OzuzuOrderSyncWorkflow
+      # Two HTTP-bound activities (a handful of Unicommerce calls, then a per-order detail fetch +
+      # upsert), well under 5 minutes for the low-volume single Shopify channel this covers.
+      tier: light
+      cron: "*/10 * * * *"      # translated from messagingapis' Spring @Scheduled(fixedRate = 600000)
+      # The lookback window is fixed at ozuzuorder.lookback-minutes regardless of how late a run
+      # fires, so a longer catchup window would not recover a bigger gap after an outage.
+      catchup-window: PT10M
+      # Placeholder: ~2x the combined scheduleToCloseTimeout of both activities (10m + 15m) so a
+      # legitimate retry sequence is never killed by the run timeout. Revisit once a real run is
+      # observed.
+      run-timeout: PT30M
+      pause-on-failure: false
+      enabled: false
+      owner: platform
+      description: Sync Ozuzu (Shopify, via Unicommerce) sale orders created or updated in the trailing window
 
     - name: package-expiry
       workflow: com.yesmadam.schedulerservice.jobs.packageexpiry.workflow.PackageExpiryWorkflow
