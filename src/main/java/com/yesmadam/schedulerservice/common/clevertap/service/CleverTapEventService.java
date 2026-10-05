@@ -40,8 +40,12 @@ public class CleverTapEventService {
     this.restTemplate = restTemplate;
     this.accountId = requireConfigured("cleaver.tap.product.id", accountId);
     this.passcode = requireConfigured("cleaver.tap.passcode", passcode);
-    this.userAccountId = requireConfigured("cleaver.tap.user.product.id", userAccountId);
-    this.userPasscode = requireConfigured("cleaver.tap.user.passcode", userPasscode);
+    // Validated lazily in sendUserEvents, not here: unlike accountId/passcode (which carry real
+    // fallback defaults and are already in production use), these are a net-new credential pair
+    // with no fallback, and requiring them eagerly would fail Spring context startup for every
+    // existing CleverTap caller in any environment that hasn't provisioned them yet.
+    this.userAccountId = userAccountId;
+    this.userPasscode = userPasscode;
     this.uploadUrl = requireConfigured("cleaver.tap.url", uploadUrl);
   }
 
@@ -51,7 +55,11 @@ public class CleverTapEventService {
   }
 
   public int sendUserEvents(List<CleverTapEvent> events) {
-    return upload(events, userAccountId, userPasscode, "user");
+    return upload(
+        events,
+        requireConfigured("cleaver.tap.user.product.id", userAccountId),
+        requireConfigured("cleaver.tap.user.passcode", userPasscode),
+        "user");
   }
 
   private int upload(

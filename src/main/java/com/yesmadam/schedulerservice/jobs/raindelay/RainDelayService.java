@@ -52,7 +52,7 @@ public class RainDelayService {
    * missing, blank or unparseable. 2.5 is the conventional light/moderate boundary — below it is
    * drizzle, and firing on drizzle trains customers to ignore the notification.
    */
-  static final BigDecimal DEFAULT_PRECIP_THRESHOLD_MM = BigDecimal.valueOf(0.0); // TESTING ONLY - revert to 2.5
+  static final BigDecimal DEFAULT_PRECIP_THRESHOLD_MM = BigDecimal.valueOf(2.5);
 
   /** CleverTap's {@code /1/upload} ceiling; {@code CleverTapEventService} throws above it. */
   private static final int CLEVERTAP_EVENTS_PER_UPLOAD = 1000;
@@ -286,7 +286,7 @@ public class RainDelayService {
     evtData.put("msgTitle", pushTitle);
     evtData.put("msgBody", pushBody);
     // Lands the customer on live booking status rather than the app home screen.
-    evtData.put("deeplink", deeplinkPrefix + "9911572");
+    evtData.put("deeplink", deeplinkPrefix + target.getOrderId());
     return evtData;
   }
 
@@ -299,7 +299,7 @@ public class RainDelayService {
     BigDecimal configured =
         SettingConfigUtil.decimalConfig(
             cfg, "RAIN_PRECIP_MM_THRESHOLD", DEFAULT_PRECIP_THRESHOLD_MM);
-    if (configured.signum() >= 0) { // TESTING ONLY - revert to > 0
+    if (configured.signum() > 0) {
       return configured.doubleValue();
     }
     log.error(
