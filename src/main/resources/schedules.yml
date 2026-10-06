@@ -221,22 +221,22 @@ scheduler:
     - name: sp-availability-auto-on
       workflow: com.yesmadam.schedulerservice.jobs.spavailabilityautoon.workflow.SpAvailabilityAutoOnWorkflow
       tier: light
-      cron: "30 0 * * *"      
-      catchup-window: PT6H      
-      pause-on-failure: false     
+      cron: "30 0 * * *"
+      catchup-window: PT6H
+      pause-on-failure: false
       run-timeout: PT45M
       enabled: false
       owner: platform
       description: Turn SP availability on for active SPs whose first kit assignment was approved yesterday
 
     - name: sp-kit-approved-notify
-      workflow: com.yesmadam.schedulerservice.jobs.spavailabilityautoon.workflow.SpKitApprovedNotifyWorkflow      
+      workflow: com.yesmadam.schedulerservice.jobs.spavailabilityautoon.workflow.SpKitApprovedNotifyWorkflow
       tier: light
-      cron: "0 20 * * *"      
-      jitter: PT2M      
-      catchup-window: PT2H     
+      cron: "0 20 * * *"
+      jitter: PT2M
+      catchup-window: PT2H
       pause-on-failure: false
-      run-timeout: PT45M      
+      run-timeout: PT45M
       enabled: false
       owner: platform
       description: CleverTap heads-up to active SPs whose first kit assignment was approved yesterday
@@ -264,6 +264,21 @@ scheduler:
       enabled: false
       owner: platform
       description: Increment SP inventory and flip delivered-but-unavailable products to available
+
+    - name: sp-tomorrow-job-reminder
+      workflow: com.yesmadam.schedulerservice.jobs.sptomorrowjobreminder.workflow.SpTomorrowJobReminderWorkflow
+      tier: standard
+      cron: "0 12 * * *"
+      # "Tomorrow" is fixed at noon, not derived from fire time, so a late run within the same day
+      # still targets the right date; beyond a couple of hours the reminder is stale.
+      catchup-window: PT2H
+      run-timeout: PT30M
+      # Pushes real SPs via CleverTap. A repeated failure should stop and be looked at rather than
+      # keep firing.
+      pause-on-failure: true
+      enabled: false
+      owner: growth
+      description: Push-notify (via CleverTap) SPs with a non-cancelled job booked for tomorrow
 
     - name: sp-wallet-sum
       workflow: com.yesmadam.schedulerservice.jobs.spwalletsum.workflow.SpWalletSumWorkflow
