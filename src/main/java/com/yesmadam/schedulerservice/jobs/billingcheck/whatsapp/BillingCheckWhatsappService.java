@@ -30,7 +30,8 @@ public class BillingCheckWhatsappService {
 
   public static final String PAYLOAD_NO = "BILLING_CHECK_NO:";
 
-  @Value("${com.tata.sms.auth-key.token}")
+  // Same Secrets Manager key as the feedback-reminder sender: both are customer-facing feedback templates.
+  @Value("${feedbackreminder.whatsapp.auth-key.token}")
   private String authKeyToken;
 
   @Value("${com.tata.sms.send.url}")
