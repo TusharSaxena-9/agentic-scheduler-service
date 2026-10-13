@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
@@ -37,11 +38,15 @@ class BillingCheckWhatsappServiceTest {
     service = new BillingCheckWhatsappService(restTemplate);
     ReflectionTestUtils.setField(service, "authKeyToken", "test-token");
     ReflectionTestUtils.setField(service, "whatsappUrl", "https://tata.example/send");
+    ReflectionTestUtils.setField(service, "yesButtonPayload", "PFX/0/null/yesid");
+    ReflectionTestUtils.setField(service, "noButtonPayload", "PFX/1/null/noid");
   }
 
   @Test
   @SuppressWarnings("unchecked")
-  void send_shouldBuildBodyAndTwoQuickReplyButtonsCarryingTheOrderId() throws Exception {
+  void send_shouldBuildBodyAndTwoQuickReplyButtonsWithTheConfiguredPayloads() throws Exception {
+    when(restTemplate.postForEntity(any(String.class), any(), eq(WhatsappTataResponse.class)))
+        .thenReturn(ResponseEntity.ok(new WhatsappTataResponse()));
     service.send("9999900011", "feedback_addon_1", List.of("Priya", "Beauty", "1499", "Facial"), 42L);
 
     ArgumentCaptor<HttpEntity<Object>> entity = ArgumentCaptor.forClass(HttpEntity.class);
@@ -61,13 +66,13 @@ class BillingCheckWhatsappServiceTest {
 
     JsonNode yes = components.get(1);
     assertThat(yes.get("type").asText()).isEqualTo("button");
-    assertThat(yes.get("sub_type").asText()).isEqualTo("quick_reply");
+    assertThat(yes.get("sub_type").asText()).isEqualTo("QUICK_REPLY");
     assertThat(yes.get("index").asText()).isEqualTo("0");
     assertThat(yes.at("/parameters/0/type").asText()).isEqualTo("payload");
-    assertThat(yes.at("/parameters/0/payload").asText()).isEqualTo("BILLING_CHECK_YES:42");
+    assertThat(yes.at("/parameters/0/payload").asText()).isEqualTo("PFX/0/null/yesid");
     assertThat(yes.at("/parameters/0").has("text")).isFalse();
 
-    assertThat(components.get(2).at("/parameters/0/payload").asText()).isEqualTo("BILLING_CHECK_NO:42");
+    assertThat(components.get(2).at("/parameters/0/payload").asText()).isEqualTo("PFX/1/null/noid");
     assertThat(components.get(2).get("index").asText()).isEqualTo("1");
   }
 

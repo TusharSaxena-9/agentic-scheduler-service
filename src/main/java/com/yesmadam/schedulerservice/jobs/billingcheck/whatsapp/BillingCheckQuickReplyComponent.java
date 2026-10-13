@@ -11,9 +11,10 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * A template quick-reply button: {@code {"type":"button","sub_type":"quick_reply","index":"0",
- * "parameters":[{"type":"payload","payload":"..."}]}}. The payload is what the customer's tap
- * echoes back to the inbound handler, which is how a Yes/No reply is tied to a booking.
+ * A template quick-reply button: {@code {"type":"button","sub_type":"QUICK_REPLY","index":"0",
+ * "parameters":[{"type":"payload","payload":"..."}]}}. {@code sub_type} is upper-case — the casing
+ * Tata's working request uses. The payload is a Tata-issued id for this template's button, not free
+ * text, so it is supplied from configuration.
  */
 @Getter
 @Setter
@@ -21,7 +22,7 @@ import lombok.Setter;
 public class BillingCheckQuickReplyComponent extends WhatsappTemplateComponentRequest {
 
   @JsonProperty("sub_type")
-  private String subType = "quick_reply";
+  private String subType = "QUICK_REPLY";
 
   private String index;
 

@@ -19,16 +19,22 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Sends the {@code feedback_addon_1} utility template: four body variables and two quick-reply
- * buttons whose payloads carry the booking id back with the customer's tap.
+ * buttons (Yes / No).
  */
 @Slf4j
 @Service
 public class BillingCheckWhatsappService {
 
-  /** Payload prefixes the inbound-reply handler must match. Agree these with whoever builds it. */
-  public static final String PAYLOAD_YES = "BILLING_CHECK_YES:";
+  /**
+   * Tata's own ids for this template's Yes / No buttons ({@code <prefix>/<index>/null/<id>}). They
+   * identify the button, so they are the same for every customer and every send. Required — a missing
+   * one fails startup rather than the first send (CLAUDE.md rule 21).
+   */
+  @Value("${billingcheck.whatsapp.yes-button-payload}")
+  private String yesButtonPayload;
 
-  public static final String PAYLOAD_NO = "BILLING_CHECK_NO:";
+  @Value("${billingcheck.whatsapp.no-button-payload}")
+  private String noButtonPayload;
 
   // Same Secrets Manager key as the feedback-reminder sender: both are customer-facing feedback templates.
   @Value("${feedbackreminder.whatsapp.auth-key.token}")
@@ -60,8 +66,8 @@ public class BillingCheckWhatsappService {
     template.setComponents(
         List.of(
             body,
-            new BillingCheckQuickReplyComponent("0", PAYLOAD_YES + orderId),
-            new BillingCheckQuickReplyComponent("1", PAYLOAD_NO + orderId)));
+            new BillingCheckQuickReplyComponent("0", yesButtonPayload),
+            new BillingCheckQuickReplyComponent("1", noButtonPayload)));
 
     BillingCheckWhatsappRequest req = new BillingCheckWhatsappRequest();
     req.setTo("+91" + recipientMobile);
