@@ -59,6 +59,26 @@ scheduler:
       owner: platform
       description: Advance, close or escalate live job distribution rounds, then fire at most one queued order
 
+    - name: billing-check-whatsapp
+      workflow: com.yesmadam.schedulerservice.jobs.billingcheck.workflow.BillingCheckWorkflow
+      # Fixed-time on purpose: the PRD is "a message at 5 PM for yesterday's bookings". The window is
+      # [17:00 yesterday, 17:00 today) IST, derived from the nominal fire time and floored to 17:00,
+      # so a late or caught-up run still covers the right day and consecutive days tile.
+      tier: standard
+      cron: "0 17 * * *"   # Asia/Kolkata via temporal.schedule.defaults.time-zone
+      # Default 1-minute jitter is kept: there is no exact-second requirement, and 17:00 is a round hour.
+      # A run up to 6h late still sends a useful, if slower, billing check; later than that it is stale.
+      catchup-window: PT6H
+      # ~100 sequential sends per chunk; a few thousand orders is tens of minutes. 2h is ~2x a
+      # generous estimate and a placeholder until one real run has been timed.
+      run-timeout: PT2H
+      # Windows tile per day, so pausing on a failed run would silently skip tomorrow's window too.
+      # Failures surface as a failed workflow; alert on that and on absence (rule 20).
+      pause-on-failure: false
+      enabled: false
+      owner: platform
+      description: WhatsApp each customer their final bill and ask whether any service was left off it (Beauty / Beauty Salon at Home, bookings ended 17:00-17:00)
+
     - name: booking-monitor
       workflow: com.yesmadam.schedulerservice.jobs.bookingmonitor.workflow.BookingMonitorWorkflow
       tier: light
