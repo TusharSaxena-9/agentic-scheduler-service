@@ -120,12 +120,13 @@ class BillingCheckServiceTest {
   }
 
   @Test
-  void finalAmount_shouldMatchAppServerFormula() {
+  void finalAmount_shouldMatchAppServerFormulaPlusCodFee() {
     BillingCheckOrderProjection p = mock(BillingCheckOrderProjection.class);
     when(p.getTotal()).thenReturn(1000);
     when(p.getTip()).thenReturn(50);
     when(p.getConvenienceFee()).thenReturn(29.9); // longValue() truncates, as app-server does
     when(p.getTransportCharges()).thenReturn(40);
+    when(p.getCodExtraFee()).thenReturn(9);
     when(p.getPrimeTimeCharge()).thenReturn(20);
     when(p.getLowCartFee()).thenReturn(10);
     when(p.getDisposable()).thenReturn(5);
@@ -138,8 +139,8 @@ class BillingCheckServiceTest {
     when(p.getElBookingDiscount()).thenReturn(15);
     when(p.getCovidSelfTestAmount()).thenReturn(0);
 
-    // 1000 + (50+29+40+0+20+10+5) - (100+200+30+0) + 60 - 10 - 15
-    assertThat(BillingAmountCalculator.finalAmount(p)).isEqualTo(859L);
+    // 1000 + (50+29+40+9+0+20+10+5) - (100+200+30+0) + 60 - 10 - 15
+    assertThat(BillingAmountCalculator.finalAmount(p)).isEqualTo(868L);
   }
 
   @Test

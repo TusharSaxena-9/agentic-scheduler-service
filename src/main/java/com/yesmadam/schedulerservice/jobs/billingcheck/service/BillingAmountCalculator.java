@@ -3,8 +3,9 @@ package com.yesmadam.schedulerservice.jobs.billingcheck.service;
 import com.yesmadam.schedulerservice.jobs.billingcheck.projections.BillingCheckOrderProjection;
 
 /**
- * The final bill shown to the customer. A line-for-line port of app-server's {@code
- * OrderUtilities.calculateOrderTotal} — if that rule changes, this must change with it, or the
+ * The final bill shown to the customer. App-server's {@code
+ * OrderUtilities.calculateOrderTotal} plus {@code cod_extra_fee}, which that method omits but the
+ * customer is charged — if that rule changes, this must change with it, or the
  * message quotes an amount the customer never paid.
  */
 final class BillingAmountCalculator {
@@ -16,6 +17,7 @@ final class BillingAmountCalculator {
         n(p.getTip())
             + (p.getConvenienceFee() != null ? p.getConvenienceFee().longValue() : 0L)
             + n(p.getTransportCharges())
+            + n(p.getCodExtraFee())
             + n(p.getCovidSelfTestAmount())
             + n(p.getPrimeTimeCharge())
             + n(p.getLowCartFee())

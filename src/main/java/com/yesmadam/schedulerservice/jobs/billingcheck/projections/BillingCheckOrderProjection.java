@@ -26,6 +26,8 @@ public interface BillingCheckOrderProjection {
 
   Integer getTransportCharges();
 
+  Integer getCodExtraFee();
+
   Integer getCovidSelfTestAmount();
 
   Integer getPrimeTimeCharge();

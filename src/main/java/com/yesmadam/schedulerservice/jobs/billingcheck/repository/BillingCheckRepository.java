@@ -47,6 +47,7 @@ public interface BillingCheckRepository extends JpaRepository<Order, Long> {
            o.tip                       as tip,
            o.convenience_fee           as convenienceFee,
            o.transport_charges         as transportCharges,
+           o.cod_extra_fee             as codExtraFee,
            o.covidSelfTestAmount       as covidSelfTestAmount,
            o.primetimecharge           as primeTimeCharge,
            la.low_cart_fee             as lowCartFee,
