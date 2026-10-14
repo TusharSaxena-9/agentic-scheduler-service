@@ -3,6 +3,7 @@ package com.yesmadam.schedulerservice.utils;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -59,6 +60,14 @@ public class QueryTimer {
    * overloads above don't collide under generic type erasure (both would otherwise erase to
    * {@code time(String, Supplier)}).
    */
+  public int time(String queryName, IntSupplier query) {
+    long start = System.currentTimeMillis();
+    int result = query.getAsInt();
+    durationsMs.put(queryName, System.currentTimeMillis() - start);
+    rowCounts.put(queryName, result);
+    return result;
+  }
+
   @FunctionalInterface
   public interface ListSupplier<V> extends Supplier<List<V>> {}
 }
