@@ -71,6 +71,25 @@ scheduler:
       owner: platform
       description: Alert when Android or iOS bookings drop to zero in the trailing window
 
+    - name: commission-audit
+      workflow: com.yesmadam.schedulerservice.jobs.commissionaudit.workflow.CommissionAuditWorkflow
+      tier: standard
+      # Two hours after the cron repo's StopJobAndDeductCommission.DeductCommissionIfAny (03:00), so
+      # this audits that run's result. The target is "after 03:00 has finished", not exactly 05:00,
+      # so the default jitter is fine.
+      cron: "0 5 * * *"
+      # The date audited is always yesterday, so a run a few hours late still reports the same
+      # orders and is still worth sending. After 07:00 it overlaps the working day, so skip it.
+      catchup-window: PT2H
+      # One single-day query plus one mail. Covers the worst case of all retries (fetch 20m +
+      # mail 5m schedule-to-close). Placeholder until a real run has been observed.
+      run-timeout: PT30M
+      # Mails finance. A repeated failure should stop and be looked at rather than keep firing.
+      pause-on-failure: true
+      enabled: false
+      owner: finance
+      description: Mail yesterday's completed orders whose commission was not deducted, or that have no SP
+
     - name: feedback-reminder
       workflow: com.yesmadam.schedulerservice.jobs.order.feedbackreminder.workflow.FeedbackReminderWorkflow
       tier: light
@@ -170,6 +189,21 @@ scheduler:
       owner: platform
       description: Alert by mail and WhatsApp when configured hub/product live stock drops to zero
 
+    - name: rain-delay-notification
+      workflow: com.yesmadam.schedulerservice.jobs.raindelay.RainDelayWorkflow
+      tier: standard
+      # Every 30 minutes, all day. Each run covers the NON-OVERLAPPING tile
+      cron: "*/30 * * * *"
+      jitter: PT0S
+      catchup-window: PT15M
+      overlap: SCHEDULE_OVERLAP_POLICY_BUFFER_ONE
+      run-timeout: PT25M
+      pause-on-failure: true
+      # Needs: rainHub row, WEATHER_API_KEY (WeatherAPI.com) and the WhatsApp template.
+      enabled: false
+      owner: platform
+      description: Push a rain-delay heads-up via CleverTap to customers whose booking starts in this run's 30-minute slot at a rainy configured hub
+
     - name: rose-order-eligible-sp-pool
       workflow: com.yesmadam.schedulerservice.jobs.roseorder.workflow.RoseOrderEligibleSpPoolWorkflow
       tier: heavy
@@ -196,22 +230,22 @@ scheduler:
     - name: sp-availability-auto-on
       workflow: com.yesmadam.schedulerservice.jobs.spavailabilityautoon.workflow.SpAvailabilityAutoOnWorkflow
       tier: light
-      cron: "30 0 * * *"      
-      catchup-window: PT6H      
-      pause-on-failure: false     
+      cron: "30 0 * * *"
+      catchup-window: PT6H
+      pause-on-failure: false
       run-timeout: PT45M
       enabled: false
       owner: platform
       description: Turn SP availability on for active SPs whose first kit assignment was approved yesterday
 
     - name: sp-kit-approved-notify
-      workflow: com.yesmadam.schedulerservice.jobs.spavailabilityautoon.workflow.SpKitApprovedNotifyWorkflow      
+      workflow: com.yesmadam.schedulerservice.jobs.spavailabilityautoon.workflow.SpKitApprovedNotifyWorkflow
       tier: light
-      cron: "0 20 * * *"      
-      jitter: PT2M      
-      catchup-window: PT2H     
+      cron: "0 20 * * *"
+      jitter: PT2M
+      catchup-window: PT2H
       pause-on-failure: false
-      run-timeout: PT45M      
+      run-timeout: PT45M
       enabled: false
       owner: platform
       description: CleverTap heads-up to active SPs whose first kit assignment was approved yesterday
@@ -239,6 +273,21 @@ scheduler:
       enabled: false
       owner: platform
       description: Increment SP inventory and flip delivered-but-unavailable products to available
+
+    - name: sp-tomorrow-job-reminder
+      workflow: com.yesmadam.schedulerservice.jobs.sptomorrowjobreminder.workflow.SpTomorrowJobReminderWorkflow
+      tier: standard
+      cron: "0 12 * * *"
+      # "Tomorrow" is fixed at noon, not derived from fire time, so a late run within the same day
+      # still targets the right date; beyond a couple of hours the reminder is stale.
+      catchup-window: PT2H
+      run-timeout: PT30M
+      # Pushes real SPs via CleverTap. A repeated failure should stop and be looked at rather than
+      # keep firing.
+      pause-on-failure: true
+      enabled: false
+      owner: growth
+      description: Push-notify (via CleverTap) SPs with a non-cancelled job booked for tomorrow
 
     - name: sp-wallet-sum
       workflow: com.yesmadam.schedulerservice.jobs.spwalletsum.workflow.SpWalletSumWorkflow
@@ -291,3 +340,17 @@ scheduler:
       enabled: false
       owner: platform
       description: Enqueue users 30/7/4/1 day(s) from wallet-balance expiry onto the wallet-expiry-notification SQS queue
+
+    - name: coupon-whatsapp-reminder-enqueue
+      workflow: com.yesmadam.schedulerservice.jobs.couponwhatsapp.workflow.CouponWhatsappReminderWorkflow
+      # Runs at 9 AM daily. DEMO wiring — queue URL and WhatsApp template are placeholders (see
+      # application-*.properties and cxconsumers' coupon-whatsapp consumer) until the real ones are
+      # provided; left disabled until then.
+      tier: standard
+      cron: "0 9 * * *"
+      catchup-window: PT2H
+      run-timeout: PT30M
+      pause-on-failure: true
+      enabled: false
+      owner: platform
+      description: Enqueue yesterday's completed orders' claimed-but-unsent brand coupons onto the coupon-whatsapp SQS queue

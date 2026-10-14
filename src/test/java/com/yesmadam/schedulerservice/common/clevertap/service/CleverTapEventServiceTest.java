@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -14,6 +15,7 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
@@ -41,22 +43,73 @@ class CleverTapEventServiceTest {
 
   @Mock RestTemplate restTemplate;
 
+  @Test
+  @DisplayName("sendUserEvents authenticates with the CUSTOMER credentials")
+  void userSendUsesUserCredentials() {
+    when(restTemplate.postForEntity(eq(URL), any(HttpEntity.class), eq(String.class)))
+        .thenReturn(new ResponseEntity<>("{\"status\":\"success\"}", HttpStatus.OK));
+
+    service().sendUserEvents(ONE_EVENT);
+
+    // The two CleverTap projects are separate accounts. Sending a customer identity with the SP
+    // passcode returns 401 Invalid Credentials, so this pairing is the whole point of the method.
+    ArgumentCaptor<HttpEntity<?>> sent = ArgumentCaptor.forClass(HttpEntity.class);
+    verify(restTemplate).postForEntity(eq(URL), sent.capture(), eq(String.class));
+    assertThat(sent.getValue().getHeaders().getFirst("X-CleverTap-Account-Id"))
+        .isEqualTo("USER_ACCOUNT");
+    assertThat(sent.getValue().getHeaders().getFirst("X-CleverTap-Passcode"))
+        .isEqualTo("USER_PASSCODE");
+  }
+
+  @Test
+  @DisplayName("sendEvents still authenticates with the SP credentials")
+  void spSendUsesSpCredentials() {
+    when(restTemplate.postForEntity(eq(URL), any(HttpEntity.class), eq(String.class)))
+        .thenReturn(new ResponseEntity<>("{\"status\":\"success\"}", HttpStatus.OK));
+
+    service().sendEvents(ONE_EVENT);
+
+    ArgumentCaptor<HttpEntity<?>> sent = ArgumentCaptor.forClass(HttpEntity.class);
+    verify(restTemplate).postForEntity(eq(URL), sent.capture(), eq(String.class));
+    assertThat(sent.getValue().getHeaders().getFirst("X-CleverTap-Account-Id"))
+        .isEqualTo("ACCOUNT");
+  }
+
+  @Test
+  @DisplayName(
+      "a blank user credential does not fail startup, but fails the first sendUserEvents call")
+  void blankUserCredentialFailsLazilyOnFirstUse() {
+    CleverTapEventService blankAccount =
+        new CleverTapEventService(restTemplate, "ACCOUNT", "PASSCODE", "", "USER_PASSCODE", URL);
+    assertThatThrownBy(() -> blankAccount.sendUserEvents(ONE_EVENT))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("cleaver.tap.user.product.id");
+    verifyNoInteractions(restTemplate);
+
+    CleverTapEventService blankPasscode =
+        new CleverTapEventService(
+            restTemplate, "ACCOUNT", "PASSCODE", "USER_ACCOUNT", "  ", URL);
+    assertThatThrownBy(() -> blankPasscode.sendUserEvents(ONE_EVENT))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("cleaver.tap.user.passcode");
+  }
+
   private CleverTapEventService service() {
-    return new CleverTapEventService(restTemplate, "ACCOUNT", "PASSCODE", URL);
+    return new CleverTapEventService(restTemplate, "ACCOUNT", "PASSCODE", "USER_ACCOUNT", "USER_PASSCODE", URL);
   }
 
   @Test
   @DisplayName("missing credentials fail at startup, not at 00:30 on the first send")
   void missingConfigFailsConstruction() {
-    assertThatThrownBy(() -> new CleverTapEventService(restTemplate, "", "PASSCODE", URL))
+    assertThatThrownBy(() -> new CleverTapEventService(restTemplate, "", "PASSCODE", "USER_ACCOUNT", "USER_PASSCODE", URL))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("cleaver.tap.product.id");
 
-    assertThatThrownBy(() -> new CleverTapEventService(restTemplate, "ACCOUNT", "  ", URL))
+    assertThatThrownBy(() -> new CleverTapEventService(restTemplate, "ACCOUNT", "  ", "USER_ACCOUNT", "USER_PASSCODE", URL))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("cleaver.tap.passcode");
 
-    assertThatThrownBy(() -> new CleverTapEventService(restTemplate, "ACCOUNT", "PASSCODE", null))
+    assertThatThrownBy(() -> new CleverTapEventService(restTemplate, "ACCOUNT", "PASSCODE", "USER_ACCOUNT", "USER_PASSCODE", null))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("cleaver.tap.url");
   }
@@ -65,9 +118,9 @@ class CleverTapEventServiceTest {
   @DisplayName("a leftover placeholder is treated as unconfigured, not as a valid value")
   void placeholderValuesAreRejected() {
     assertThatThrownBy(
-            () -> new CleverTapEventService(restTemplate, "ACCOUNT", "PASSCODE", "localhost"))
+            () -> new CleverTapEventService(restTemplate, "ACCOUNT", "PASSCODE", "USER_ACCOUNT", "USER_PASSCODE", "localhost"))
         .isInstanceOf(IllegalStateException.class);
-    assertThatThrownBy(() -> new CleverTapEventService(restTemplate, "changeme", "PASSCODE", URL))
+    assertThatThrownBy(() -> new CleverTapEventService(restTemplate, "changeme", "PASSCODE", "USER_ACCOUNT", "USER_PASSCODE", URL))
         .isInstanceOf(IllegalStateException.class);
   }
 
