@@ -308,6 +308,15 @@ scheduler:
       owner: finance
       description: Sum all SP main/saving wallet balances (active and deactive) and snapshot the total daily
 
+    - name: user-activity-score-decay
+      workflow: com.yesmadam.schedulerservice.jobs.useractivityscoredecay.workflow.UserActivityScoreDecayWorkflow
+      tier: standard
+      cron: "0 1 * * *"
+      catchup-window: PT2H
+      enabled: false
+      owner: platform
+      description: Nightly recency-multiplier decay for Home Feed Personalization Bucket-A scores (tbl_user_activity_service_score)
+
     - name: user-wallet-sum
       workflow: com.yesmadam.schedulerservice.jobs.userwalletsum.workflow.UserWalletSumWorkflow
       # Unmeasured — a single unfiltered full-table SUM over tbl_user, not chunked. Standard rather
