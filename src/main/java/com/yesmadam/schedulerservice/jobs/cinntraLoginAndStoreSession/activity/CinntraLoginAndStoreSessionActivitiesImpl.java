@@ -15,7 +15,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-@ActivityImpl(taskQueues = "${temporal.taskqueue.heavy}")
+@ActivityImpl(taskQueues = "${temporal.taskqueue.light}")
 public class CinntraLoginAndStoreSessionActivitiesImpl implements CinntraLoginAndStoreSessionActivities {
 
   private final CinntraLoginAndStoreSessionService cinntraLoginAndStoreSessionService;

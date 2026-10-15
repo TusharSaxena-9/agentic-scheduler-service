@@ -17,8 +17,9 @@ import io.temporal.spring.boot.WorkflowImpl;
 import io.temporal.workflow.Workflow;
 
 /**
- * Implementation of the elite-fee-mismatch-to-SAP sync workflow, on the heavy tier like every SAP
- * job.
+ * Implementation of the elite-fee-mismatch-to-SAP sync workflow, on the standard tier: a chunk
+ * spends its time waiting on SAP over HTTP, not holding a database connection, so it does not
+ * need one of heavy's few slots.
  *
  * <p>Shape: one prepare activity resolves the run (tracking's selection query plus the fee map and
  * plan amount it resolves once per run), then the workflow walks the subscription ids in chunks of
@@ -31,7 +32,7 @@ import io.temporal.workflow.Workflow;
  * replay. Logging goes through {@link Workflow#getLogger} rather than a {@code @Slf4j} field: a
  * plain logger re-emits every line on replay.
  */
-@WorkflowImpl(taskQueues = "${temporal.taskqueue.heavy}")
+@WorkflowImpl(taskQueues = "${temporal.taskqueue.standard}")
 public class EliteMismatchSyncWorkflowImpl implements EliteMismatchSyncWorkflow {
 
   private static final Logger log = Workflow.getLogger(EliteMismatchSyncWorkflowImpl.class);
@@ -39,7 +40,7 @@ public class EliteMismatchSyncWorkflowImpl implements EliteMismatchSyncWorkflow 
   /**
    * Subscriptions per chunk activity. Each one is up to three SAP calls (BusinessPartner, Invoice,
    * IncomingPayment), so a chunk of 20 is a few minutes even when SAP is slow — short enough that a
-   * retry repeats little and a heavy slot is not held for long.
+   * retry repeats little and a slot is not held for long.
    */
   private static final int CHUNK_SIZE = 20;
 

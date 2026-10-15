@@ -1054,8 +1054,8 @@ public class EliteMismatchSyncService {
    * that: every caller's outer catch handles it without writing an error-log row.
    */
   /**
-   * Tracking's {@code HttpURLConnection}s set no timeouts, so a hung SAP socket blocks forever. On
-   * the heavy tier that pins one of a handful of slots past the heartbeat timeout — Temporal fails
+   * Tracking's {@code HttpURLConnection}s set no timeouts, so a hung SAP socket blocks forever. That
+   * pins an activity slot past the heartbeat timeout — Temporal fails
    * the attempt, but the thread keeps waiting. Bounded here; a timeout surfaces as the same caught
    * exception tracking's code already handles for any other I/O failure.
    */

@@ -22,7 +22,7 @@ import io.temporal.workflow.Workflow;
  * replay. Logging goes through {@link Workflow#getLogger} rather than a {@code @Slf4j} field: a
  * plain logger re-emits every line on replay.
  */
-@WorkflowImpl(taskQueues = "${temporal.taskqueue.heavy}")
+@WorkflowImpl(taskQueues = "${temporal.taskqueue.light}")
 public class CinntraLoginAndStoreSessionWorkflowImpl implements CinntraLoginAndStoreSessionWorkflow {
 
   private static final Logger log = Workflow.getLogger(CinntraLoginAndStoreSessionWorkflowImpl.class);

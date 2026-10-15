@@ -23,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-@ActivityImpl(taskQueues = "${temporal.taskqueue.heavy}")
+@ActivityImpl(taskQueues = "${temporal.taskqueue.standard}")
 public class EliteMismatchSyncActivitiesImpl implements EliteMismatchSyncActivities {
 
   private final EliteMismatchSyncService eliteMismatchSyncService;

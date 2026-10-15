@@ -73,8 +73,10 @@ scheduler:
 
     - name: cinntra-login-and-store-session
       workflow: com.yesmadam.schedulerservice.jobs.cinntraLoginAndStoreSession.workflow.CinntraLoginAndStoreSessionWorkflow
-      # Every SAP job runs on heavy. This one is a single short call, so it holds a slot for seconds.
-      tier: heavy
+      # One sub-second HTTP call plus a single-row upsert by primary key — a light profile. Kept off
+      # heavy deliberately: every other Cinntra job depends on this session, so the refresh must not
+      # queue behind multi-minute chunks on heavy's few slots.
+      tier: light
       # tracking's CintraSession.loginAndStoreSession, @Scheduled(cron = "0 */30 * * * *") with no
       # zone. Every 30 minutes around the clock, so the zone only shifts which :00/:30 it lands on.
       cron: "*/30 * * * *"
@@ -109,9 +111,10 @@ scheduler:
 
     - name: elite-mismatch-sync
       workflow: com.yesmadam.schedulerservice.jobs.eliteMismatchSync.workflow.EliteMismatchSyncWorkflow
-      # Every SAP job runs on heavy. Chunked: 20 subscriptions per activity, heartbeating per
-      # subscription, so a failure costs one chunk and a slot is never held for the whole run.
-      tier: heavy
+      # Chunked: 20 subscriptions per activity, heartbeating per subscription, run one chunk at a
+      # time. A chunk waits on SAP over HTTP and is not transactional, so it holds a slot for a few
+      # minutes but no database connection — standard, not heavy.
+      tier: standard
       # tracking's EliteMismatch.getEliteMismatch, @Scheduled(cron = "0 40 7 * * *", zone =
       # "Asia/Kolkata") — 07:40 IST daily.
       cron: "40 7 * * *"

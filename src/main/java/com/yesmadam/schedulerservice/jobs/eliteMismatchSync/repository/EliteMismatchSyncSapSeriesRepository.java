@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.yesmadam.schedulerservice.jobs.eliteMismatchSync.model.EliteMismatchSyncSapSeries;
 
@@ -18,6 +19,12 @@ import com.yesmadam.schedulerservice.jobs.eliteMismatchSync.model.EliteMismatchS
 @Repository
 public interface EliteMismatchSyncSapSeriesRepository extends JpaRepository<EliteMismatchSyncSapSeries, Integer> {
 
+  /**
+   * Read-only, so it runs on the reader. A {@code @Query} method does not inherit Spring
+   * Data's read-only default (only the inherited {@code CrudRepository} methods do), and with no
+   * transaction at all it would route to the writer (CLAUDE.md rule 13).
+   */
+  @Transactional(readOnly = true)
   @Query("SELECT s FROM EliteMismatchSyncSapSeries s WHERE s.sapWhsCode = :sapWhsCode")
   Optional<EliteMismatchSyncSapSeries> findBySapWhsCode(@Param("sapWhsCode") String sapWhsCode);
 }

@@ -12,7 +12,7 @@ import io.temporal.activity.ActivityMethod;
 /**
  * Temporal activities for the elite-fee-mismatch-to-SAP sync.
  *
- * <p>Heavy-tier shape (CLAUDE.md rules 4, 9, 10, 14): one read-only prepare step, then the workflow
+ * <p>Chunked shape (CLAUDE.md rules 4, 9, 10, 14): one read-only prepare step, then the workflow
  * drives fixed-size chunks, each its own retryable activity that heartbeats per subscription. A
  * failure costs one chunk, and a retried chunk skips subscriptions an earlier attempt already
  * posted to SAP.
