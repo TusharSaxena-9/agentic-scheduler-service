@@ -1,6 +1,8 @@
 package com.yesmadam.schedulerservice.jobs.paymentrefund.workflow;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -61,6 +63,20 @@ public class PaymentRefundWorkflowImpl implements PaymentRefundWorkflow {
   @Override
   public void run() {
     String workflowId = Workflow.getInfo().getWorkflowId();
+
+    // Split with shortlink's own validateOrderCreationOnPayment cron by hour parity: that cron
+    // only acts on even hours, this job only acts on odd hours, so the same payment_source_id is
+    // never picked up by both at once. Read via Workflow.currentTimeMillis(), not
+    // Instant.now()/System.currentTimeMillis(), so the check stays replay-safe (rule 1).
+    int hour =
+        Instant.ofEpochMilli(Workflow.currentTimeMillis())
+            .atZone(ZoneId.of("Asia/Kolkata"))
+            .getHour();
+    if (hour % 2 == 0) {
+      log.info("event=workflow_skipped_even_hour_belongs_to_shortlink workflow_id={} hour={}", workflowId, hour);
+      return;
+    }
+
     log.info("event=workflow_started workflow_id={}", workflowId);
 
     List<Long> checksumIds = activities.findPendingChecksumIds();
