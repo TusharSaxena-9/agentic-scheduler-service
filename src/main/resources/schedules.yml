@@ -162,6 +162,15 @@ scheduler:
       owner: finance
       description: Audit SP passbook entries in the trailing window and mail mismatches
 
+    - name: payment-refund-validate-order-creation
+      workflow: com.yesmadam.schedulerservice.jobs.paymentrefund.workflow.PaymentRefundWorkflow
+      tier: standard
+      cron: "*/3 * * * *"        # ported from shortlink's @Scheduled(fixedRate = 180000)
+      run-timeout: PT10M
+      enabled: false
+      owner: platform
+      description: Re-verify Paytm/PayU transactions with no resulting order; create the order or refund
+
     - name: product-hub-live-stock-alert
       workflow: com.yesmadam.schedulerservice.jobs.producthublivestock.workflow.ProductHubLiveStockAlertWorkflow
       tier: standard

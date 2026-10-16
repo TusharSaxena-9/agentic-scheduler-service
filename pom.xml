@@ -105,7 +105,11 @@
 		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-java-sdk-sqs</artifactId>
-			<version>1.12.613</version>
+		</dependency>
+		<dependency>
+			<groupId>com.paytm.pg</groupId>
+			<artifactId>paytm-checksum</artifactId>
+			<version>1.2.1</version>
 		</dependency>
 		<dependency>
 			<groupId>com.ysmdm</groupId>
