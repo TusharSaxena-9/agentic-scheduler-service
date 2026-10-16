@@ -3,10 +3,8 @@ package com.yesmadam.schedulerservice.jobs.billingcheck.service;
 import com.yesmadam.schedulerservice.jobs.billingcheck.projections.BillingCheckOrderProjection;
 
 /**
- * The final bill shown to the customer. App-server's {@code
- * OrderUtilities.calculateOrderTotal} plus {@code cod_extra_fee}, which that method omits but the
- * customer is charged — if that rule changes, this must change with it, or the
- * message quotes an amount the customer never paid.
+ * The final bill shown to the customer: app-server's {@code OrderUtilities.calculateOrderTotal}
+ * plus {@code cod_extra_fee}, which that method omits but the customer is charged.
  */
 final class BillingAmountCalculator {
 

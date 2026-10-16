@@ -30,7 +30,7 @@ class BillingCheckWorkflowImplTest {
           .setDoNotStart(true)
           .build();
 
-  /** Scripted pages, one per fetch, in order. */
+  /** Scripted pages, one per fetch. */
   static class ScriptedActivities implements BillingCheckActivities {
     final List<BillingCheckChunk> pages = new ArrayList<>();
     final List<Long> cursorsSeen = new ArrayList<>();
@@ -103,7 +103,7 @@ class BillingCheckWorkflowImplTest {
 
   @Test
   void run_shouldNeverRetryASendThatFailedMidChunk(TestWorkflowEnvironment env, Worker worker) {
-    // A retry would re-message everyone the first attempt reached: sends run exactly once.
+    // Sends run once: a retry would re-message customers already reached.
     ScriptedActivities a = new ScriptedActivities();
     a.failSendOnce = true;
     a.pages.add(page(2, true, 1, 2));

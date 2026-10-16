@@ -7,7 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** One message to send: recipient, booking id (for logs) and the four template body variables. */
+/** One message to send: recipient, order id (for logs) and the template body variables. */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

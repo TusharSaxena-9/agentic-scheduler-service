@@ -19,14 +19,12 @@ import com.yesmadam.schedulerservice.utils.QueryTimer;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Post-service billing check: WhatsApps the customer their final bill and asks whether the
- * beautician did anything not on it.
+ * Post-service billing check: WhatsApps the customer their final bill and asks whether any service
+ * was left off it.
  *
- * <p>Two steps, deliberately separate so they can have different retry rules. {@link #fetchChunk} is
- * a pure read, safe to retry. {@link #sendChunk} is not — a WhatsApp cannot be taken back — and keeps
- * no sent-marker (a deliberate choice: no table, no flag), so the workflow runs it exactly once.
- * That means a worker killed mid-chunk loses the rest of that chunk rather than risking a duplicate;
- * failed sends are logged with their order id so they can be re-driven by hand if it ever matters.
+ * <p>{@link #fetchChunk} is a pure read and safe to retry. {@link #sendChunk} is not, and there is
+ * no sent-marker, so the workflow runs it once: a worker killed mid-page loses the rest of that page
+ * rather than risking a duplicate. Failed sends are logged with their order id.
  */
 @Slf4j
 @Service
@@ -35,7 +33,7 @@ public class BillingCheckService {
   static final int SERVICES_MAX_CHARS = 60;
   private static final String SERVICES_TRUNCATION_SUFFIX = " and more";
 
-  /** Completed, and completed-with-feedback — the two states the PRD counts as a finished booking. */
+  /** Order Completed and Feedback Done. */
   private static final List<Integer> ELIGIBLE_STATUS_CODES =
       List.of(OrderStatus.ORDER_COMPLETED.getStatus(), OrderStatus.ORDER_FEEDBACK_DONE.getStatus());
 
@@ -92,8 +90,7 @@ public class BillingCheckService {
     int failed = 0;
     int processed = 0;
     for (BillingCheckOrder order : chunk.getOrders()) {
-      // Outside the try on purpose: heartbeat throws when the activity is cancelled, and that
-      // exception must escape (ProgressReporter contract), not be counted as a send failure.
+      // Outside the try: a cancelled heartbeat throws and must escape, not count as a send failure.
       progress.report(processed++);
       try {
         whatsappService.send(
@@ -132,11 +129,7 @@ public class BillingCheckService {
     return name.trim().split("\\s+")[0];
   }
 
-  /**
-   * One line, no newlines, at most {@value #SERVICES_MAX_CHARS} characters of service names followed
-   * by "and more" when cut. Cuts at a service boundary where one exists, so a name is never split
-   * mid-word.
-   */
+  /** One line, at most 60 chars of names, cut at a service boundary then " and more". */
   static String servicesLine(String serviceNames) {
     if (!StringUtils.hasText(serviceNames)) {
       return "your booked services";

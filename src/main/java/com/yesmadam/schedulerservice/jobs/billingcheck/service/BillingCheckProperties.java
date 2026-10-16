@@ -12,26 +12,20 @@ import org.springframework.util.StringUtils;
 import lombok.Getter;
 import lombok.Setter;
 
-/**
- * Per-environment knobs for the billing-check job ({@code billingcheck.*}).
- *
- * <p>Validated at startup (CLAUDE.md rule 21): a blank template or an empty category list would
- * otherwise only surface when the first run tried to send, and a category list that silently
- * matched nothing looks identical to "no bookings today".
- */
+/** {@code billingcheck.*} settings, validated at startup so a bad value fails early (rule 21). */
 @Getter
 @Setter
 @Component
 @ConfigurationProperties(prefix = "billingcheck")
 public class BillingCheckProperties {
 
-  /** Approved WhatsApp template name (Utility, English, Yes/No quick-reply buttons). */
+  /** Approved WhatsApp template name. */
   private String templateName;
 
-  /** {@code tbl_order.category_id} values in scope (PRD: Beauty and Beauty Salon at Home). */
+  /** {@code tbl_order.category_id} values in scope. */
   private List<Integer> categoryIds = new ArrayList<>();
 
-  /** Orders handled per activity call — one retryable chunk, one cursor step. */
+  /** Orders per page. */
   private int chunkSize = 100;
 
   @PostConstruct

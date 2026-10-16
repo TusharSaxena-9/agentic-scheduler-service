@@ -61,19 +61,16 @@ scheduler:
 
     - name: billing-check-whatsapp
       workflow: com.yesmadam.schedulerservice.jobs.billingcheck.workflow.BillingCheckWorkflow
-      # Fixed-time on purpose: the PRD is "a message at 5 PM for yesterday's bookings". The window is
-      # [17:00 yesterday, 17:00 today) IST, derived from the nominal fire time and floored to 17:00,
-      # so a late or caught-up run still covers the right day and consecutive days tile.
+      # Window is [17:00 yesterday, 17:00 today) IST, derived from the fire time, so late runs still
+      # cover the right day.
       tier: standard
       cron: "0 17 * * *"   # Asia/Kolkata via temporal.schedule.defaults.time-zone
-      # Default 1-minute jitter is kept: there is no exact-second requirement, and 17:00 is a round hour.
-      # A run up to 6h late still sends a useful, if slower, billing check; later than that it is stale.
+      # A run up to 6h late is still useful; later is stale.
       catchup-window: PT6H
-      # ~100 sequential sends per chunk; a few thousand orders is tens of minutes. 2h is ~2x a
-      # generous estimate and a placeholder until one real run has been timed.
-      run-timeout: PT2H
-      # Windows tile per day, so pausing on a failed run would silently skip tomorrow's window too.
-      # Failures surface as a failed workflow; alert on that and on absence (rule 20).
+      # Sequential sends, ~0.5-3s each: 2k orders ~50m, 5k ~2.1h. Hitting this loses the remaining
+      # customers (sends never retry). Placeholder until one real run is timed.
+      run-timeout: PT3H
+      # Windows tile per day, so pausing on failure would also skip tomorrow's window.
       pause-on-failure: false
       enabled: false
       owner: platform

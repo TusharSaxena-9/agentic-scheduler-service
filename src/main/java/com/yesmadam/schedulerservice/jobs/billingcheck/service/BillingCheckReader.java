@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.yesmadam.schedulerservice.jobs.billingcheck.projections.BillingCheckOrderProjection;
 import com.yesmadam.schedulerservice.jobs.billingcheck.repository.BillingCheckRepository;
 
-/** The job's only database access, and it is a pure read — replica, short transaction (rule 13). */
+/** The job's only database access: a pure read on the replica (rule 13). */
 @Service
 public class BillingCheckReader {
 

@@ -12,10 +12,8 @@ import io.temporal.activity.Activity;
 import io.temporal.spring.boot.ActivityImpl;
 
 /**
- * Thin adapter between Temporal and {@link BillingCheckService}. Stays on {@code standard} with the
- * workflow rather than routing the send to {@code notification}: the queue name is only a Spring
- * placeholder, which workflow code cannot resolve (CLAUDE.md rule 1) — see {@code
- * FeedbackReminderActivitiesImpl} for the same trade-off.
+ * Thin adapter; stays on {@code standard} because the queue name is a Spring placeholder that
+ * workflow code cannot resolve (same trade-off as FeedbackReminderActivitiesImpl).
  */
 @Component
 @ActivityImpl(taskQueues = "${temporal.taskqueue.standard}")

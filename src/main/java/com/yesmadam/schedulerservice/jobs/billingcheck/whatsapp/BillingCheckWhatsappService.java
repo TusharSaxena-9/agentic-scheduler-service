@@ -17,26 +17,19 @@ import com.yesmadam.schedulerservice.common.whatsapp.model.WhatsappTemplateLangu
 
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Sends the {@code feedback_addon_1} utility template: four body variables and two quick-reply
- * buttons (Yes / No).
- */
+/** Sends the {@code feedback_addon_1} template: four body variables and Yes / No quick replies. */
 @Slf4j
 @Service
 public class BillingCheckWhatsappService {
 
-  /**
-   * Tata's own ids for this template's Yes / No buttons ({@code <prefix>/<index>/null/<id>}). They
-   * identify the button, so they are the same for every customer and every send. Required — a missing
-   * one fails startup rather than the first send (CLAUDE.md rule 21).
-   */
+  /** Tata-issued ids of the Yes / No buttons, same for every send. Required at startup (rule 21). */
   @Value("${billingcheck.whatsapp.yes-button-payload}")
   private String yesButtonPayload;
 
   @Value("${billingcheck.whatsapp.no-button-payload}")
   private String noButtonPayload;
 
-  // Same Secrets Manager key as the feedback-reminder sender: both are customer-facing feedback templates.
+  // Same Secrets Manager key as the feedback-reminder sender.
   @Value("${feedbackreminder.whatsapp.auth-key.token}")
   private String authKeyToken;
 

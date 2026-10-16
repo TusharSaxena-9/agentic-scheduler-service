@@ -11,10 +11,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * A template quick-reply button: {@code {"type":"button","sub_type":"QUICK_REPLY","index":"0",
- * "parameters":[{"type":"payload","payload":"..."}]}}. {@code sub_type} is upper-case — the casing
- * Tata's working request uses. The payload is a Tata-issued id for this template's button, not free
- * text, so it is supplied from configuration.
+ * A quick-reply button. {@code sub_type} is upper-case and the payload is a Tata-issued id, both as
+ * in Tata's working request.
  */
 @Getter
 @Setter
@@ -32,7 +30,7 @@ public class BillingCheckQuickReplyComponent extends WhatsappTemplateComponentRe
     setParameters(List.of(new PayloadParameter(payload)));
   }
 
-  /** {@code text} is null and omitted from the JSON; only {@code payload} is sent. */
+  /** {@code text} is null and omitted from the JSON. */
   @Getter
   @JsonInclude(JsonInclude.Include.NON_NULL)
   public static class PayloadParameter extends WhatsappComponentParameterRequest {

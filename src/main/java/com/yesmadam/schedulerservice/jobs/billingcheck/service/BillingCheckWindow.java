@@ -9,11 +9,8 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
 /**
- * The 24-hour window a run covers: {@code [17:00 the day before, 17:00 the day of)} IST.
- *
- * <p>Derived from the run's nominal fire time and <b>floored to 17:00</b>, so the window is the same
- * whether the run starts at 17:00:20 with jitter, an hour late, or the next morning on catch-up, and
- * consecutive days tile with no gap and no overlap (CLAUDE.md rule 1).
+ * The window a run covers: [17:00 the day before, 17:00 the day of) IST. Derived from the nominal
+ * fire time and floored to 17:00, so late or retried runs cover the same day and days tile.
  */
 record BillingCheckWindow(Timestamp start, Timestamp end, Date bookingDateLower, Date bookingDateUpper) {
 
@@ -28,9 +25,7 @@ record BillingCheckWindow(Timestamp start, Timestamp end, Date bookingDateLower,
     }
     ZonedDateTime start = end.minusDays(1);
 
-    // Coarse booking_date pre-filter so the query can use the status/booking_date index rather than
-    // scan every completed order (same reasoning as FeedbackReminderService). -1 day covers a
-    // booking that started the day before its slot ended; it never decides correctness.
+    // Coarse booking_date pre-filter for the index; it never decides correctness.
     LocalDate lower = start.toLocalDate().minusDays(1);
     LocalDate upperExclusive = end.toLocalDate().plusDays(1);
     return new BillingCheckWindow(

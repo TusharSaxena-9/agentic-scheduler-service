@@ -1,10 +1,6 @@
 package com.yesmadam.schedulerservice.jobs.billingcheck.projections;
 
-/**
- * One eligible order with everything the message needs. The bill components are returned raw (not
- * summed in SQL) so the amount rule lives in one tested Java method, {@code BillingAmountCalculator},
- * mirroring app-server's {@code OrderUtilities.calculateOrderTotal}.
- */
+/** One eligible order. Bill components are raw; {@code BillingAmountCalculator} sums them. */
 public interface BillingCheckOrderProjection {
 
   Long getOrderId();
@@ -15,7 +11,7 @@ public interface BillingCheckOrderProjection {
 
   String getCategoryName();
 
-  /** Comma-separated billed service names; empty string when the order has none. */
+  /** Comma-separated billed service names; empty if none. */
   String getServiceNames();
 
   Integer getTotal();

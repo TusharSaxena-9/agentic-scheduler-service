@@ -52,9 +52,7 @@ class BillingCheckServiceTest {
     service = new BillingCheckService(reader, whatsapp, properties);
   }
 
-  // ================================================================
-  // Window — nominal fire time, floored to 17:00 IST
-  // ================================================================
+  // Window
 
   @Test
   void window_shouldCoverPreviousFivePmToTodayFivePm() {
@@ -88,9 +86,7 @@ class BillingCheckServiceTest {
     assertThat(w.end().toInstant()).isEqualTo(zdt("2026-10-12T17:00:00").toInstant());
   }
 
-  // ================================================================
   // Message formatting
-  // ================================================================
 
   @Test
   void servicesLine_shouldTruncateAtAServiceBoundaryWithAndMore() {
@@ -151,9 +147,7 @@ class BillingCheckServiceTest {
     assertThat(BillingAmountCalculator.finalAmount(p)).isEqualTo(700L);
   }
 
-  // ================================================================
-  // fetchChunk — cursor and payload shape
-  // ================================================================
+  // fetchChunk
 
   @Test
   void fetchChunk_shouldBuildOrdersAndAdvanceTheCursorToTheLastOrderId() {
@@ -215,15 +209,13 @@ class BillingCheckServiceTest {
 
   @Test
   void chunk_shouldBeBoundedByTheChunkSizeNotTheTable() {
-    // Rule 9: the page the workflow carries can never exceed chunk-size orders.
+    // Rule 9: a page never exceeds the chunk size.
     stubRows(row(1, 0), row(2, 0), row(3, 0));
 
     assertThat(service.fetchChunk(nominal(), 0L).getOrders()).hasSizeLessThanOrEqualTo(3);
   }
 
-  // ================================================================
-  // sendChunk — one failure must not stop the others
-  // ================================================================
+  // sendChunk
 
   @Test
   void sendChunk_shouldSendEveryOrderInThePage() {
@@ -239,7 +231,7 @@ class BillingCheckServiceTest {
 
   @Test
   void sendChunk_shouldKeepGoingAfterAMidRunSendFailure() {
-    // The orders either side of a failing one are neither lost nor sent twice.
+    // Orders either side of a failure are neither lost nor sent twice.
     org.mockito.Mockito.lenient()
         .doThrow(new BillingCheckSendException("timeout", null))
         .when(whatsapp)
@@ -274,9 +266,7 @@ class BillingCheckServiceTest {
     verify(whatsapp, never()).send(anyString(), anyString(), any(), anyLong());
   }
 
-  // ================================================================
-  // Startup validation (rule 21)
-  // ================================================================
+  // Startup validation
 
   @Test
   void properties_shouldFailStartupOnMissingTemplateOrCategories() {
@@ -291,9 +281,7 @@ class BillingCheckServiceTest {
     assertThatThrownBy(p::validate).hasMessageContaining("chunk-size");
   }
 
-  // ================================================================
   // helpers
-  // ================================================================
 
   private void stubRows(BillingCheckOrderProjection... rows) {
     when(reader.findEligibleOrders(any(), any(), any(), anyLong(), anyInt()))
