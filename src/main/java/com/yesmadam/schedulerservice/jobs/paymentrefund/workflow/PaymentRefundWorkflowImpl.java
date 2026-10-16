@@ -73,7 +73,7 @@ public class PaymentRefundWorkflowImpl implements PaymentRefundWorkflow {
             .atZone(ZoneId.of("Asia/Kolkata"))
             .getHour();
     if (hour % 2 == 0) {
-      log.info("event=workflow_skipped_even_hour_belongs_to_shortlink workflow_id={} hour={}", workflowId, hour);
+      log.error("event=workflow_skipped_even_hour_belongs_to_shortlink workflow_id={} hour={}", workflowId, hour);
       return;
     }
 
