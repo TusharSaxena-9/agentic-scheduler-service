@@ -421,3 +421,16 @@ scheduler:
       enabled: false
       owner: platform
       description: Enqueue yesterday's completed orders' claimed-but-unsent brand coupons onto the coupon-whatsapp SQS queue
+
+    - name: leave-wallet-accrual
+      workflow: com.yesmadam.schedulerservice.jobs.leavewalletaccrual.workflow.LeaveWalletAccrualWorkflow
+      # Chunked (400 SPs per activity), each chunk short; unmeasured. Landed on light per explicit
+      # request despite the 10m per-attempt StartToCloseTimeout being outside light's usual
+      # sub-second-to-1m profile. Revisit tier and run-timeout once a real run has been observed.
+      tier: light
+      cron: "0 0 1 * *"         # monthly, 00:00 on the 1st (was temporal.cron.leavewalletaccrual)
+      # A missed monthly accrual is not made up by the next tick, so a late run is still worth doing.
+      run-timeout: PT2H
+      enabled: false
+      owner: platform
+      description: Accrue monthly SP leave wallet balances in chunks
