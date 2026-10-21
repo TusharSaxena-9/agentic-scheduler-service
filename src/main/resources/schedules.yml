@@ -59,6 +59,23 @@ scheduler:
       owner: platform
       description: Advance, close or escalate live job distribution rounds, then fire at most one queued order
 
+    - name: billing-check-whatsapp
+      workflow: com.yesmadam.schedulerservice.jobs.billingcheck.workflow.BillingCheckWorkflow
+      # Window is [17:00 yesterday, 17:00 today) IST, derived from the fire time, so late runs still
+      # cover the right day.
+      tier: standard
+      cron: "0 17 * * *"   # Asia/Kolkata via temporal.schedule.defaults.time-zone
+      # A run up to 6h late is still useful; later is stale.
+      catchup-window: PT6H
+      # Sequential sends, ~0.5-3s each: 2k orders ~50m, 5k ~2.1h. Hitting this loses the remaining
+      # customers (sends never retry). Placeholder until one real run is timed.
+      run-timeout: PT3H
+      # Windows tile per day, so pausing on failure would also skip tomorrow's window.
+      pause-on-failure: false
+      enabled: false
+      owner: platform
+      description: WhatsApp each customer their final bill and ask whether any service was left off it (Beauty / Beauty Salon at Home, bookings ended 17:00-17:00)
+
     - name: booking-monitor
       workflow: com.yesmadam.schedulerservice.jobs.bookingmonitor.workflow.BookingMonitorWorkflow
       tier: light
@@ -203,6 +220,15 @@ scheduler:
       owner: finance
       description: Audit SP passbook entries in the trailing window and mail mismatches
 
+    - name: payment-refund-validate-order-creation
+      workflow: com.yesmadam.schedulerservice.jobs.paymentrefund.workflow.PaymentRefundWorkflow
+      tier: standard
+      cron: "*/3 * * * *"        # ported from shortlink's @Scheduled(fixedRate = 180000)
+      run-timeout: PT10M
+      enabled: false
+      owner: platform
+      description: Re-verify Paytm/PayU transactions with no resulting order; create the order or refund
+
     - name: product-hub-live-stock-alert
       workflow: com.yesmadam.schedulerservice.jobs.producthublivestock.workflow.ProductHubLiveStockAlertWorkflow
       tier: standard
@@ -339,6 +365,15 @@ scheduler:
       enabled: false
       owner: finance
       description: Sum all SP main/saving wallet balances (active and deactive) and snapshot the total daily
+
+    - name: user-activity-score-decay
+      workflow: com.yesmadam.schedulerservice.jobs.useractivityscoredecay.workflow.UserActivityScoreDecayWorkflow
+      tier: standard
+      cron: "0 1 * * *"
+      catchup-window: PT2H
+      enabled: false
+      owner: platform
+      description: Nightly recency-multiplier decay for Home Feed Personalization Bucket-A scores (tbl_user_activity_service_score)
 
     - name: user-wallet-sum
       workflow: com.yesmadam.schedulerservice.jobs.userwalletsum.workflow.UserWalletSumWorkflow
