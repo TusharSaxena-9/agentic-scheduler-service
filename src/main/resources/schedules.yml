@@ -88,6 +88,25 @@ scheduler:
       owner: platform
       description: Alert when Android or iOS bookings drop to zero in the trailing window
 
+    - name: cinntra-login-and-store-session
+      workflow: com.yesmadam.schedulerservice.jobs.cinntraLoginAndStoreSession.workflow.CinntraLoginAndStoreSessionWorkflow
+      # One sub-second HTTP call plus a single-row upsert by primary key — a light profile. Kept off
+      # heavy deliberately: every other Cinntra job depends on this session, so the refresh must not
+      # queue behind multi-minute chunks on heavy's few slots.
+      tier: light
+      # tracking's CintraSession.loginAndStoreSession, @Scheduled(cron = "0 */30 * * * *") with no
+      # zone. Every 30 minutes around the clock, so the zone only shifts which :00/:30 it lands on.
+      cron: "*/30 * * * *"
+      # A missed refresh is covered by the next tick 30 minutes later; a late one is worth nothing.
+      catchup-window: PT5M
+      # One Login call plus one upsert. Covers all three activity attempts (8m schedule-to-close).
+      run-timeout: PT10M
+      # Every other Cinntra job authenticates with the session this writes, so enable and verify
+      # this one before any of them.
+      enabled: false
+      owner: finance
+      description: Log in to Cinntra (SAP B1 Service Layer) and store the session id in tbl_sap_session
+
     - name: commission-audit
       workflow: com.yesmadam.schedulerservice.jobs.commissionaudit.workflow.CommissionAuditWorkflow
       tier: standard
@@ -106,6 +125,28 @@ scheduler:
       enabled: false
       owner: finance
       description: Mail yesterday's completed orders whose commission was not deducted, or that have no SP
+
+    - name: elite-mismatch-sync
+      workflow: com.yesmadam.schedulerservice.jobs.eliteMismatchSync.workflow.EliteMismatchSyncWorkflow
+      # Chunked: 20 subscriptions per activity, heartbeating per subscription, run one chunk at a
+      # time. A chunk waits on SAP over HTTP and is not transactional, so it holds a slot for a few
+      # minutes but no database connection — standard, not heavy.
+      tier: standard
+      # tracking's EliteMismatch.getEliteMismatch, @Scheduled(cron = "0 40 7 * * *", zone =
+      # "Asia/Kolkata") — 07:40 IST daily.
+      cron: "40 7 * * *"
+      # Always invoices yesterday's subscriptions, so a run a couple of hours late still covers the
+      # same window.
+      catchup-window: PT2H
+      # Placeholder until a real run has been observed: prepare (20m) plus chunks of a few minutes
+      # each. One day's Elite subscriptions is a handful of chunks; a chunk retried to its 2h
+      # schedule-to-close limit is the worst case this has to cover.
+      run-timeout: PT3H
+      # Posts real invoices and payments to SAP. A repeated failure should stop and be looked at.
+      pause-on-failure: true
+      enabled: false
+      owner: finance
+      description: Post yesterday's Elite subscriptions to SAP as an AR Invoice plus Incoming Payment
 
     - name: feedback-reminder
       workflow: com.yesmadam.schedulerservice.jobs.order.feedbackreminder.workflow.FeedbackReminderWorkflow
