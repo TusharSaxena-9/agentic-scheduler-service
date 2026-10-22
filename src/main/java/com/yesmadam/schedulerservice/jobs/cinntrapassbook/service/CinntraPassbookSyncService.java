@@ -33,7 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Ports tracking's {@code CinntraPassbook} cron — the three {@code @Scheduled} methods that post
- * {@code tbl_sp_passbook} movements to SAP through Cinntra — onto the heavy tier.
+ * {@code tbl_sp_passbook} movements to SAP through Cinntra — onto Temporal.
  *
  * <p>Shape, per run: one read-only selection of passbook ids, then chunks. Each chunk loads
  * everything it needs in a handful of bulk queries ({@link CinntraPassbookReader}) and then posts

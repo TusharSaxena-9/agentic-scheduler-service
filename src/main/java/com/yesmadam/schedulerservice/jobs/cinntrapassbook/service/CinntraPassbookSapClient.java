@@ -47,7 +47,7 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <ul>
  *   <li>Connect and read timeouts. Tracking's connections have none, so a hung SAP socket would pin
- *       a heavy-tier slot until the heartbeat timeout and keep the thread after it.
+ *       an activity slot until the heartbeat timeout and keep the thread after it.
  *   <li>{@code tbl_sap_error_log.requestJson} gets the JSON body, not tracking's curl command with
  *       the live Key/userId headers in it. Nothing logs those headers either.
  *   <li>The address-retry PATCH takes the SP's hub from the caller, which already loaded it, rather

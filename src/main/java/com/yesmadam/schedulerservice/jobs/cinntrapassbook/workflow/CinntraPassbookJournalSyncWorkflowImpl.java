@@ -13,15 +13,16 @@ import io.temporal.workflow.Workflow;
  * Posts the last 30 minutes of {@code tbl_sp_passbook} to SAP as journal entries, journal vouchers
  * and vendor payments, and retries anything from the 90 minutes before that is still unprocessed.
  *
- * <p>Heavy tier, like every SAP job. Shape and activity sizing are in {@link
- * CinntraPassbookSyncRunner}. A chunk that fails after its retries does not stop the rest; the run
- * fails at the end so the failure is visible. A single entry SAP rejects is not a run failure — it
- * is counted, logged to {@code tbl_sap_error_log}, and left unprocessed, as in tracking.
+ * <p>Standard tier: the work is SAP calls, not long database holds. Shape and activity sizing are
+ * in {@link CinntraPassbookSyncRunner}. A chunk that fails after its retries does not stop the
+ * rest; the run fails at the end so the failure is visible. A single entry SAP rejects is not a
+ * run failure — it is counted, logged to {@code tbl_sap_error_log}, and left unprocessed, as in
+ * tracking.
  *
  * <p>Pure orchestration — all side effects go through activities. Do not inject Spring beans or use
  * {@code @Value} here; workflow code must stay deterministic for Temporal replay.
  */
-@WorkflowImpl(taskQueues = "${temporal.taskqueue.heavy}")
+@WorkflowImpl(taskQueues = "${temporal.taskqueue.standard}")
 public class CinntraPassbookJournalSyncWorkflowImpl implements CinntraPassbookJournalSyncWorkflow {
 
   private static final Logger log =

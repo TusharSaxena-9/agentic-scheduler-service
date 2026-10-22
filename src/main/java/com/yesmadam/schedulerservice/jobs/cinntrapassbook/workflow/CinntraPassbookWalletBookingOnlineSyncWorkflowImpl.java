@@ -17,15 +17,16 @@ import io.temporal.workflow.Workflow;
  * as incoming payments. Wallet runs first, then booking online, each independent of the other as in
  * tracking.
  *
- * <p>Heavy tier, like every SAP job. Shape and activity sizing are in {@link
- * CinntraPassbookSyncRunner}. A chunk that fails after its retries does not stop the rest; the run
- * fails at the end so the failure is visible. A single entry SAP rejects is not a run failure — it
- * is counted, logged to {@code tbl_sap_error_log}, and left unprocessed, as in tracking.
+ * <p>Standard tier: the work is SAP calls, not long database holds. Shape and activity sizing are
+ * in {@link CinntraPassbookSyncRunner}. A chunk that fails after its retries does not stop the
+ * rest; the run fails at the end so the failure is visible. A single entry SAP rejects is not a
+ * run failure — it is counted, logged to {@code tbl_sap_error_log}, and left unprocessed, as in
+ * tracking.
  *
  * <p>Pure orchestration — all side effects go through activities. Do not inject Spring beans or use
  * {@code @Value} here; workflow code must stay deterministic for Temporal replay.
  */
-@WorkflowImpl(taskQueues = "${temporal.taskqueue.heavy}")
+@WorkflowImpl(taskQueues = "${temporal.taskqueue.standard}")
 public class CinntraPassbookWalletBookingOnlineSyncWorkflowImpl
     implements CinntraPassbookWalletBookingOnlineSyncWorkflow {
 

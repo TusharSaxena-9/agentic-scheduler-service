@@ -12,7 +12,7 @@ import io.temporal.activity.ActivityMethod;
 /**
  * Temporal activities for the three passbook-to-SAP syncs.
  *
- * <p>Heavy-tier shape (CLAUDE.md rules 4, 9, 10, 14): one read-only selection returning ids, then
+ * <p>Chunked shape (CLAUDE.md rules 4, 9, 10, 14): one read-only selection returning ids, then
  * the workflow drives fixed-size chunks, each its own retryable activity that bulk-loads its
  * lookups and heartbeats once per entry posted. A failure costs one chunk, and a retried chunk
  * skips entries an earlier attempt already posted.

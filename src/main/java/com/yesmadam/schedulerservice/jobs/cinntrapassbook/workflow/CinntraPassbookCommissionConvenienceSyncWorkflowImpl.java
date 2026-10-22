@@ -17,7 +17,7 @@ import io.temporal.workflow.Workflow;
  * invoices, or drafts for Notion SPs. Commission runs first, then convenience, each independent of
  * the other as in tracking.
  *
- * <p>Heavy tier, like every SAP job. Shape and activity sizing are in {@link
+ * <p>Heavy tier: the largest of the three passbook runs. Shape and activity sizing are in {@link
  * CinntraPassbookSyncRunner}. A chunk that fails after its retries does not stop the rest; the run
  * fails at the end so the failure is visible. A single entry SAP rejects is not a run failure — it
  * is counted, logged to {@code tbl_sap_error_log}, and left unprocessed, as in tracking.

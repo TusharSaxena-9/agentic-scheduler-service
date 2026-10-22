@@ -90,8 +90,9 @@ scheduler:
 
     - name: cinntra-passbook-commission-convenience-sync
       workflow: com.yesmadam.schedulerservice.jobs.cinntrapassbook.workflow.CinntraPassbookCommissionConvenienceSyncWorkflow
-      # Every SAP job runs on heavy. Chunked: 20 passbook entries per activity, heartbeating per
-      # entry, so a failure costs one chunk and a slot is never held for the whole run.
+      # Heavy: one night's commission plus convenience rows is the largest of the three passbook
+      # runs. Chunked: 20 passbook entries per activity, heartbeating per entry, so a failure costs
+      # one chunk and a slot is never held for the whole run.
       tier: heavy
       # tracking's CinntraPassbook.syncCommissionAndConvenienceToSap, @Scheduled(cron = "0 0 1 * * *",
       # zone = "Asia/Kolkata") — 01:00 IST daily. Nothing needs the exact minute, so default jitter.
@@ -109,8 +110,9 @@ scheduler:
 
     - name: cinntra-passbook-journal-sync
       workflow: com.yesmadam.schedulerservice.jobs.cinntrapassbook.workflow.CinntraPassbookJournalSyncWorkflow
-      # Every SAP job runs on heavy, chunked as above.
-      tier: heavy
+      # Standard: a 30-minute tile is a few minutes of SAP calls, chunked as above. The time is spent
+      # waiting on SAP, not holding a database connection, so it does not need a heavy slot.
+      tier: standard
       # tracking's CinntraPassbook.getPassbook, @Scheduled(cron = "0 0/30 * * * *") with no zone —
       # every 30 minutes around the clock.
       cron: "*/30 * * * *"
@@ -133,8 +135,9 @@ scheduler:
 
     - name: cinntra-passbook-wallet-booking-online-sync
       workflow: com.yesmadam.schedulerservice.jobs.cinntrapassbook.workflow.CinntraPassbookWalletBookingOnlineSyncWorkflow
-      # Every SAP job runs on heavy, chunked as above.
-      tier: heavy
+      # Standard: chunked as above, and the time is spent waiting on SAP rather than holding a
+      # database connection, so it does not need a heavy slot.
+      tier: standard
       # tracking's CinntraPassbook.syncWalletAndBookingOnlineToSap, @Scheduled(cron = "0 0 4 * * *")
       # with no zone, so the tracking pod's TZ — IST. 04:00 IST daily, default jitter.
       cron: "0 4 * * *"

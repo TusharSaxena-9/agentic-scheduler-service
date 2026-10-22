@@ -19,9 +19,13 @@ import io.temporal.spring.boot.ActivityImpl;
  * Thin adapter between Temporal and the service layer — all logic lives in {@link
  * CinntraPassbookSyncService}. The only Temporal-specific work here is turning the service's
  * progress reports into heartbeats.
+ *
+ * <p>Registered on both tiers because the three workflows sharing it are split across them —
+ * commission/convenience on heavy, journal and wallet/booking-online on standard. The stub sets no
+ * task queue, so each workflow's activities run on its own tier.
  */
 @Component
-@ActivityImpl(taskQueues = "${temporal.taskqueue.heavy}")
+@ActivityImpl(taskQueues = {"${temporal.taskqueue.heavy}", "${temporal.taskqueue.standard}"})
 public class CinntraPassbookSyncActivitiesImpl implements CinntraPassbookSyncActivities {
 
   private final CinntraPassbookSyncService syncService;
