@@ -576,18 +576,42 @@ class CinntraPassbookPayloadTest {
   }
 
   @Test
-  void aMissingSessionRowTriggersALoginBeforeAnythingIsSent() {
+  void aMissingSessionRowFailsTheEntryWithoutALoginOrACallAsInTracking() {
     lenient().when(sessionRepository.findById(1)).thenReturn(Optional.empty());
-    givenLoginStores("SESSION-2");
-    // No row on the writer either, so nobody else has logged in yet.
-    lenient().when(sessionRepository.findSessionIdOnWriter(1)).thenReturn(Optional.empty());
     entry(84L, 11, "DEBIT", 1180, null);
 
     CinntraPassbookChunkResult result = sync(CinntraPassbookSyncKind.COMMISSION, 84L);
 
-    verify(loginService).loginAndStoreSession();
+    verify(loginService, never()).loginAndStoreSession();
+    assertThat(sap.calls()).isEmpty();
+    assertThat(result.getFailed()).isEqualTo(1);
+  }
+
+  @Test
+  void onlyA401TriggersARefreshNotAnInvalidSessionBodyOnAnotherStatus() {
+    // B1's "Invalid session" body, but on a 400: an ordinary entry failure, as in tracking.
+    sap.respondTo("/VendorPayments", 400, SapStubServer.INVALID_SESSION);
+    entry(86L, 43, "DEBIT", 250, null);
+
+    CinntraPassbookChunkResult result = sync(CinntraPassbookSyncKind.JOURNAL, 86L);
+
+    verify(loginService, never()).loginAndStoreSession();
     assertThat(sap.calls()).hasSize(1);
-    assertThat(result.getSucceeded()).isEqualTo(1);
+    assertThat(result.getFailed()).isEqualTo(1);
+    verify(writeRepository).updateSapProcessed(86L, 0);
+    verify(errorLogRepository).save(any());
+  }
+
+  @Test
+  void aForbiddenResponseIsAnOrdinaryFailureToo() {
+    sap.respondTo("/JournalEntries", 403, "{\"error\":{\"message\":{\"value\":\"Forbidden\"}}}");
+    accountCodes.add(accountCode(33, "52000033"));
+    entry(87L, 33, "CREDIT", 75, null);
+
+    CinntraPassbookChunkResult result = sync(CinntraPassbookSyncKind.JOURNAL, 87L);
+
+    verify(loginService, never()).loginAndStoreSession();
+    assertThat(result.getFailed()).isEqualTo(1);
   }
 
   @Test

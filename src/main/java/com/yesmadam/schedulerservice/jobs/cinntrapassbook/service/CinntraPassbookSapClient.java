@@ -55,11 +55,13 @@ import lombok.extern.slf4j.Slf4j;
  * </ul>
  *
  * <p>One addition tracking does not have: <b>an expired session is refreshed in place.</b> When SAP
- * rejects the session (HTTP 401, or B1 error code 301), the client logs in once through {@link
+ * answers <b>HTTP 401</b> — and only then — the client logs in once through {@link
  * CinntraLoginAndStoreSessionService} — the same login the 30-minute session job runs — and retries
  * the post with the new session. If SAP still rejects it, {@link
  * CinntraPassbookSapSessionException} is thrown and the chunk fails for Temporal to retry; see that
  * class for why. Tracking instead failed every remaining entry until the next scheduled login.
+ * Every other response, including any other 4xx, is an ordinary per-entry failure exactly as in
+ * tracking, and a missing {@code tbl_sap_session} row fails the entry without a call, as there.
  *
  * <p>Otherwise no method here throws: a failure comes back as an unsuccessful {@link
  * CinntraPassbookSapResult}, as tracking's does.
@@ -72,9 +74,6 @@ public class CinntraPassbookSapClient {
   private static final int SAP_CONNECT_TIMEOUT_MS = 10_000;
   private static final int SAP_READ_TIMEOUT_MS = 60_000;
   private static final Duration PATCH_TIMEOUT = Duration.ofMillis(10_000);
-
-  /** B1 Service Layer's error code for "Invalid session" / "session already timeout". */
-  private static final int SAP_INVALID_SESSION_CODE = 301;
 
   /** tracking's {@code Utilities.STATE_ABBREVIATIONS}; an unknown state maps to {@code ""}. */
   private static final Map<String, String> STATE_ABBREVIATIONS =
@@ -167,14 +166,23 @@ public class CinntraPassbookSapClient {
             .findById(SAP_SESSION_ID)
             .map(CinntraPassbookSapSession::getSessionId)
             .orElse(null);
+    if (sessionId == null) {
+      // tracking dereferences the row directly: the entry fails before any HTTP call, and no
+      // error-log row is written. Not a 401, so no re-login either.
+      log.error("Error while sending JSON request: no SAP session row with id {}", SAP_SESSION_ID);
+      CinntraPassbookSapResult missing = new CinntraPassbookSapResult();
+      missing.setSuccess(false);
+      missing.setErrorMessage("No SAP session row with id " + SAP_SESSION_ID);
+      return missing;
+    }
+
     CinntraPassbookSapResult result =
-        sessionId == null
-            ? null
-            : send(path, body, orderId, requestType, journalTypeCode, sessionId);
+        send(path, body, orderId, requestType, journalTypeCode, sessionId);
     if (result != null) {
       return result;
     }
 
+    // SAP answered 401: refresh once and retry once.
     String refreshed = refreshSession(sessionId);
     result =
         refreshed == null
@@ -182,14 +190,14 @@ public class CinntraPassbookSapClient {
             : send(path, body, orderId, requestType, journalTypeCode, refreshed);
     if (result == null) {
       throw new CinntraPassbookSapSessionException(
-          "SAP rejected the session for " + path + " even after a re-login");
+          "SAP answered 401 for " + path + " even after a re-login");
     }
     return result;
   }
 
   /**
-   * One POST with {@code sessionId}. Returns {@code null} when SAP rejected the session itself —
-   * nothing is recorded then, since the post is about to be retried — and the outcome otherwise.
+   * One POST with {@code sessionId}. Returns {@code null} when SAP answered HTTP 401 — nothing is
+   * recorded then, since the post is about to be retried — and the outcome otherwise.
    */
   private CinntraPassbookSapResult send(
       String path,
@@ -223,7 +231,7 @@ public class CinntraPassbookSapClient {
       String responseText = readBody(conn, responseCode);
       log.info("Response Code: {}", responseCode);
 
-      if (isSessionRejected(responseCode, responseText)) {
+      if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
         log.warn("event=cinntra_session_rejected path={} status={}", path, responseCode);
         return null;
       }
@@ -408,26 +416,6 @@ public class CinntraPassbookSapClient {
   }
 
   /**
-   * True when SAP refused the session rather than the document: HTTP 401, or B1's {@code
-   * error.code} 301. A bad Key/userId at the Cinntra proxy also answers 401; the refresh then does
-   * not help, and the chunk fails — which is the right outcome for broken credentials too.
-   */
-  private boolean isSessionRejected(int responseCode, String responseText) {
-    if (responseCode == 401) {
-      return true;
-    }
-    if (responseCode < 400) {
-      return false;
-    }
-    try {
-      JsonNode code = objectMapper.readTree(responseText).path("error").path("code");
-      return code.asInt(-1) == SAP_INVALID_SESSION_CODE;
-    } catch (Exception e) {
-      return false;
-    }
-  }
-
-  /**
    * Logs in again unless another chunk already did, and returns the session to retry with — or
    * {@code null} when there is still no new one. Reads on the writer: the login has just written
    * the row and the replica may still hold {@code rejectedSessionId}.
@@ -439,7 +427,7 @@ public class CinntraPassbookSapClient {
         log.info("event=cinntra_session_already_refreshed");
         return current;
       }
-      log.warn("event=cinntra_session_refresh reason=rejected_or_missing");
+      log.warn("event=cinntra_session_refresh reason=http_401");
       loginService.loginAndStoreSession();
       String refreshed = sapSessionRepository.findSessionIdOnWriter(SAP_SESSION_ID).orElse(null);
       return refreshed != null && !refreshed.equals(rejectedSessionId) ? refreshed : null;

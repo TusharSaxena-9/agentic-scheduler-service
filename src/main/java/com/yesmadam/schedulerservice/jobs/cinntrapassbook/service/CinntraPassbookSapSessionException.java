@@ -1,8 +1,7 @@
 package com.yesmadam.schedulerservice.jobs.cinntrapassbook.service;
 
 /**
- * SAP rejected the session, and refreshing it once did not help — or there was no usable session
- * row to begin with.
+ * SAP answered HTTP 401, and refreshing the session once did not help.
  *
  * <p>Deliberately not handled per entry. Every entry after this one would fail the same way, so the
  * posters rethrow it, the chunk activity fails, and Temporal retries the chunk; entries already
