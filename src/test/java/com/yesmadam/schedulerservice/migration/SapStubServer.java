@@ -26,6 +26,7 @@ final class SapStubServer implements AutoCloseable {
   private final HttpServer server;
   private final List<Call> calls = new ArrayList<>();
   private final Map<String, String> responsesByPathSuffix = new LinkedHashMap<>();
+  private final Map<String, Integer> statusByPathSuffix = new LinkedHashMap<>();
   private String defaultResponse = "{}";
 
   SapStubServer() throws IOException {
@@ -43,7 +44,7 @@ final class SapStubServer implements AutoCloseable {
           }
           byte[] out = responseFor(path).getBytes(StandardCharsets.UTF_8);
           exchange.getResponseHeaders().add("Content-Type", "application/json");
-          exchange.sendResponseHeaders(200, out.length);
+          exchange.sendResponseHeaders(statusFor(path), out.length);
           exchange.getResponseBody().write(out);
           exchange.close();
         });
@@ -56,6 +57,20 @@ final class SapStubServer implements AutoCloseable {
         .map(Map.Entry::getValue)
         .findFirst()
         .orElse(defaultResponse);
+  }
+
+  private int statusFor(String path) {
+    return statusByPathSuffix.entrySet().stream()
+        .filter(e -> path.endsWith(e.getKey()))
+        .map(Map.Entry::getValue)
+        .findFirst()
+        .orElse(200);
+  }
+
+  /** Canned JSON returned with {@code status} for any request whose path ends with {@code pathSuffix}. */
+  SapStubServer respondTo(String pathSuffix, int status, String json) {
+    statusByPathSuffix.put(pathSuffix, status);
+    return respondTo(pathSuffix, json);
   }
 
   /** Canned JSON returned for any request whose path ends with {@code pathSuffix}. */
