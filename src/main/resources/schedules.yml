@@ -107,6 +107,68 @@ scheduler:
       owner: finance
       description: Log in to Cinntra (SAP B1 Service Layer) and store the session id in tbl_sap_session
 
+    - name: cinntra-passbook-commission-convenience-sync
+      workflow: com.yesmadam.schedulerservice.jobs.cinntrapassbook.workflow.CinntraPassbookCommissionConvenienceSyncWorkflow
+      # Heavy: one night's commission plus convenience rows is the largest of the three passbook
+      # runs. Chunked: 20 passbook entries per activity, heartbeating per entry, so a failure costs
+      # one chunk and a slot is never held for the whole run.
+      tier: heavy
+      # tracking's CinntraPassbook.syncCommissionAndConvenienceToSap, @Scheduled(cron = "0 0 1 * * *",
+      # zone = "Asia/Kolkata") — 01:00 IST daily. Nothing needs the exact minute, so default jitter.
+      cron: "0 1 * * *"
+      # Always posts yesterday, so a run a couple of hours late still covers the same day.
+      catchup-window: PT2H
+      # Placeholder until a real run has been observed: one day of commission plus convenience rows
+      # at roughly a second per SAP post, with room for a chunk retried to its 2h limit.
+      run-timeout: PT4H
+      # Posts real invoices to SAP. A repeated failure should stop and be looked at.
+      pause-on-failure: true
+      enabled: false
+      owner: finance
+      description: Post yesterday's SP commission and convenience-fee passbook entries to SAP as AR invoices
+
+    - name: cinntra-passbook-journal-sync
+      workflow: com.yesmadam.schedulerservice.jobs.cinntrapassbook.workflow.CinntraPassbookJournalSyncWorkflow
+      # Standard: a 30-minute tile is a few minutes of SAP calls, chunked as above. The time is spent
+      # waiting on SAP, not holding a database connection, so it does not need a heavy slot.
+      tier: standard
+      # tracking's CinntraPassbook.getPassbook, @Scheduled(cron = "0 0/30 * * * *") with no zone —
+      # every 30 minutes around the clock.
+      cron: "*/30 * * * *"
+      # Pinned off: each run reads the 30-minute tile ending at its scheduled slot, so consecutive runs
+      # must fire on the :00/:30 boundaries to tile the passbook with no gap or overlap.
+      jitter: PT0S
+      # A late run still reads its own tile, and anything a dropped run would have posted is picked up
+      # by the 2-hour retry window of the runs after it — so up to an hour late is still useful.
+      catchup-window: PT1H
+      # Default SKIP overlap is right: two concurrent runs would race on the same retry window, and a
+      # skipped tick loses nothing (its rows are still unprocessed when the next run's retry window
+      # reads them). Placeholder: a 30-minute tile is normally well under 10 minutes of SAP calls.
+      run-timeout: PT1H
+      # Not paused on failure: a paused journal sync stops retrying, and rows older than its 2-hour
+      # retry window are then never picked up. A failed run is visible in Temporal; the next tick retries.
+      pause-on-failure: false
+      enabled: false
+      owner: finance
+      description: Post the last 30 minutes of SP passbook movements to SAP as journal entries, vouchers and vendor payments
+
+    - name: cinntra-passbook-wallet-booking-online-sync
+      workflow: com.yesmadam.schedulerservice.jobs.cinntrapassbook.workflow.CinntraPassbookWalletBookingOnlineSyncWorkflow
+      # Standard: chunked as above, and the time is spent waiting on SAP rather than holding a
+      # database connection, so it does not need a heavy slot.
+      tier: standard
+      # tracking's CinntraPassbook.syncWalletAndBookingOnlineToSap, @Scheduled(cron = "0 0 4 * * *")
+      # with no zone, so the tracking pod's TZ — IST. 04:00 IST daily, default jitter.
+      cron: "0 4 * * *"
+      catchup-window: PT2H
+      # Placeholder: one day of wallet recharges plus online booking payments.
+      run-timeout: PT3H
+      # Posts real incoming payments to SAP. A repeated failure should stop and be looked at.
+      pause-on-failure: true
+      enabled: false
+      owner: finance
+      description: Post yesterday's SP wallet recharges and online booking payments to SAP as incoming payments
+
     - name: commission-audit
       workflow: com.yesmadam.schedulerservice.jobs.commissionaudit.workflow.CommissionAuditWorkflow
       tier: standard
