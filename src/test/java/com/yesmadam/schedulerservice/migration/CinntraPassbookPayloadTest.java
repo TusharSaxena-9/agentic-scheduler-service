@@ -11,7 +11,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -34,28 +33,28 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yesmadam.schedulerservice.common.progress.ProgressReporter;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookAccountCode;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookChunkResult;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookEntry;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookHub;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookSapDocEntry;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookSapMapping;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookSapSeries;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookSapSession;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookSelection;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookSp;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.model.CinntraPassbookSyncKind;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.projections.CinntraPassbookOrderCostingProjection;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.repository.CinntraPassbookReadRepository;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.repository.CinntraPassbookSapDocEntryRepository;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.repository.CinntraPassbookSapErrorLogRepository;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.repository.CinntraPassbookSapSessionRepository;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.repository.CinntraPassbookWriteRepository;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.service.CinntraPassbookDocumentPoster;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.service.CinntraPassbookJournalPoster;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.service.CinntraPassbookReader;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.service.CinntraPassbookSapClient;
-import com.yesmadam.schedulerservice.jobs.cinntraPassbook.service.CinntraPassbookSyncService;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookChunkResult;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSapDocEntry;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSapSession;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSelection;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSyncKind;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.projections.CinntraPassbookAccountCodeRow;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.projections.CinntraPassbookEntryRow;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.projections.CinntraPassbookHubRow;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.projections.CinntraPassbookOrderCostingProjection;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.projections.CinntraPassbookSapMappingRow;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.projections.CinntraPassbookSapSeriesRow;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.projections.CinntraPassbookSpRow;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.repository.CinntraPassbookReadRepository;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.repository.CinntraPassbookSapDocEntryRepository;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.repository.CinntraPassbookSapErrorLogRepository;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.repository.CinntraPassbookSapSessionRepository;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.repository.CinntraPassbookWriteRepository;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassbookDocumentPoster;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassbookJournalPoster;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassbookReader;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassbookSapClient;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassbookSyncService;
 
 /**
  * Payload parity and retry safety for the cinntra-passbook syncs: the real service, posters, reader
@@ -69,7 +68,7 @@ class CinntraPassbookPayloadTest {
   private static final int SP_ID = 501;
   private static final int HUB_ID = 2;
   private static final long ORDER_ID = 777_001L;
-  private static final Timestamp ENTRY_DATE = Timestamp.valueOf(LocalDateTime.of(2026, 10, 21, 14, 5));
+  private static final LocalDateTime ENTRY_DATE = LocalDateTime.of(2026, 10, 21, 14, 5);
 
   private SapStubServer sap;
   private CinntraPassbookReadRepository readRepository;
@@ -78,12 +77,12 @@ class CinntraPassbookPayloadTest {
   private CinntraPassbookSapSessionRepository sessionRepository;
   private CinntraPassbookSyncService service;
 
-  private final Map<Long, CinntraPassbookEntry> passbook = new HashMap<>();
-  private final Map<Integer, CinntraPassbookSp> sps = new HashMap<>();
-  private final Map<Integer, CinntraPassbookHub> hubs = new HashMap<>();
-  private final List<CinntraPassbookSapMapping> mappings = new ArrayList<>();
+  private final Map<Long, CinntraPassbookEntryRow> passbook = new HashMap<>();
+  private final Map<Integer, CinntraPassbookSpRow> sps = new HashMap<>();
+  private final Map<Integer, CinntraPassbookHubRow> hubs = new HashMap<>();
+  private final List<CinntraPassbookSapMappingRow> mappings = new ArrayList<>();
   private final Set<Integer> excludedCategorySps = new HashSet<>();
-  private final List<CinntraPassbookAccountCode> accountCodes = new ArrayList<>();
+  private final List<CinntraPassbookAccountCodeRow> accountCodes = new ArrayList<>();
   private final Map<Long, String> orderCosting = new HashMap<>();
   private final Set<Integer> postedKeys = new HashSet<>();
 
@@ -95,18 +94,23 @@ class CinntraPassbookPayloadTest {
     docEntryRepository = mock(CinntraPassbookSapDocEntryRepository.class);
     sessionRepository = mock(CinntraPassbookSapSessionRepository.class);
 
-    CinntraPassbookSapClient sapClient = new CinntraPassbookSapClient(
-        sessionRepository, docEntryRepository, mock(CinntraPassbookSapErrorLogRepository.class), readRepository);
+    CinntraPassbookSapClient sapClient =
+        new CinntraPassbookSapClient(
+            sessionRepository,
+            docEntryRepository,
+            mock(CinntraPassbookSapErrorLogRepository.class),
+            readRepository);
     ReflectionTestUtils.setField(sapClient, "cinntraBaseUrl", sap.baseUrl());
     ReflectionTestUtils.setField(sapClient, "cinntraKey", "k");
     ReflectionTestUtils.setField(sapClient, "cinntraUserId", "u");
 
-    service = new CinntraPassbookSyncService(
-        readRepository,
-        writeRepository,
-        new CinntraPassbookReader(readRepository),
-        new CinntraPassbookJournalPoster(sapClient, writeRepository),
-        new CinntraPassbookDocumentPoster(sapClient));
+    service =
+        new CinntraPassbookSyncService(
+            readRepository,
+            writeRepository,
+            new CinntraPassbookReader(readRepository),
+            new CinntraPassbookJournalPoster(sapClient, writeRepository),
+            new CinntraPassbookDocumentPoster(sapClient));
 
     sps.put(SP_ID, sp(SP_ID, "Asha Verma"));
     hubs.put(HUB_ID, hub());
@@ -188,17 +192,21 @@ class CinntraPassbookPayloadTest {
   }
 
   @Test
-  void productPurchaseByWalletPostsTheMaterialEntryAndThenTheGeneralEntryAsTrackingDoes() throws Exception {
+  void productPurchaseByWalletPostsTheMaterialEntryAndThenTheGeneralEntryAsTrackingDoes()
+      throws Exception {
     accountCodes.add(accountCode(40, "41000040"));
     entry(13L, 40, "DEBIT", 90, null);
 
     CinntraPassbookChunkResult result = sync(CinntraPassbookSyncKind.JOURNAL, 13L);
 
     List<JsonNode> posts = bodies("/JournalEntries");
-    assertThat(posts).extracting(p -> p.get("Memo").asText())
+    assertThat(posts)
+        .extracting(p -> p.get("Memo").asText())
         .containsExactly("Commission to Material", "Product Purchase By Wallet");
-    assertThat(posts.get(0).get("JournalEntryLines").get(1).get("ShortName").asText()).isEqualTo("M-501");
-    assertThat(posts.get(1).get("JournalEntryLines").get(1).get("AccountCode").asText()).isEqualTo("41000040");
+    assertThat(posts.get(0).get("JournalEntryLines").get(1).get("ShortName").asText())
+        .isEqualTo("M-501");
+    assertThat(posts.get(1).get("JournalEntryLines").get(1).get("AccountCode").asText())
+        .isEqualTo("41000040");
     assertThat(result.getSucceeded()).isEqualTo(2);
   }
 
@@ -247,7 +255,8 @@ class CinntraPassbookPayloadTest {
 
   @Test
   void aSapRejectionMarksTheEntryUnprocessedSoTheRetryWindowPicksItUp() throws Exception {
-    sap.respondTo("/VendorPayments", 400, "{\"error\":{\"message\":{\"value\":\"Invalid BP code\"}}}");
+    sap.respondTo(
+        "/VendorPayments", 400, "{\"error\":{\"message\":{\"value\":\"Invalid BP code\"}}}");
     entry(18L, 43, "DEBIT", 250, null);
 
     CinntraPassbookChunkResult result = sync(CinntraPassbookSyncKind.JOURNAL, 18L);
@@ -375,12 +384,16 @@ class CinntraPassbookPayloadTest {
 
   @Test
   void noMatchingRecordPatchesTheSpAddressAndRetriesOnce() {
-    sap.respondTo("/Invoices", 400, "{\"error\":{\"message\":{\"value\":\"No matching records found (ODBC -2028)\"}}}");
+    sap.respondTo(
+        "/Invoices",
+        400,
+        "{\"error\":{\"message\":{\"value\":\"No matching records found (ODBC -2028)\"}}}");
     entry(38L, 11, "DEBIT", 1180, null);
 
     CinntraPassbookChunkResult result = sync(CinntraPassbookSyncKind.COMMISSION, 38L);
 
-    assertThat(sap.calls()).extracting(SapStubServer.Call::path)
+    assertThat(sap.calls())
+        .extracting(SapStubServer.Call::path)
         .containsExactly("/Invoices", "/BusinessPartners('V-501')", "/Invoices");
     assertThat(result.getFailed()).isEqualTo(1);
     verify(readRepository).findSpAddresses(SP_ID);
@@ -438,15 +451,22 @@ class CinntraPassbookPayloadTest {
     ids.add(9_999L);
     List<Integer> reported = new ArrayList<>();
 
-    CinntraPassbookChunkResult result = service.syncChunk(CinntraPassbookSyncKind.JOURNAL, ids, reported::add);
+    CinntraPassbookChunkResult result =
+        service.syncChunk(CinntraPassbookSyncKind.JOURNAL, ids, reported::add);
 
     assertThat(reported).hasSize(21).endsWith(21);
     assertThat(result.getSucceeded()).isEqualTo(20);
     assertThat(result.getNotFound()).isEqualTo(1);
     // Bounded payload (rule 9): one entry per named query however many rows the chunk held.
     assertThat(result.getQueryRowCounts().keySet())
-        .containsExactlyInAnyOrder("findForPosting", "findSps", "findHubs", "findSapMappings",
-            "findExcludedCategorySps", "findSeries", "findAccountCodes");
+        .containsExactlyInAnyOrder(
+            "findForPosting",
+            "findSps",
+            "findHubs",
+            "findSapMappings",
+            "findExcludedCategorySps",
+            "findSeries",
+            "findAccountCodes");
   }
 
   @Test
@@ -463,16 +483,18 @@ class CinntraPassbookPayloadTest {
     lenient().when(readRepository.findIdsInWindow(any(), any())).thenReturn(List.of(3L, 2L));
     lenient().when(readRepository.findUnprocessedIdsInWindow(any(), any())).thenReturn(List.of(1L));
     // Started 20 seconds late for the 10:30 slot.
-    long nominal = LocalDateTime.of(2026, 10, 22, 10, 30, 20).atZone(IST).toInstant().toEpochMilli();
+    long nominal =
+        LocalDateTime.of(2026, 10, 22, 10, 30, 20).atZone(IST).toInstant().toEpochMilli();
 
-    CinntraPassbookSelection selection = service.selectPassbookIds(CinntraPassbookSyncKind.JOURNAL, nominal);
+    CinntraPassbookSelection selection =
+        service.selectPassbookIds(CinntraPassbookSyncKind.JOURNAL, nominal);
 
-    verify(readRepository).findIdsInWindow(
-        Timestamp.valueOf(LocalDateTime.of(2026, 10, 22, 10, 0)),
-        Timestamp.valueOf(LocalDateTime.of(2026, 10, 22, 10, 30)));
-    verify(readRepository).findUnprocessedIdsInWindow(
-        Timestamp.valueOf(LocalDateTime.of(2026, 10, 22, 8, 30)),
-        Timestamp.valueOf(LocalDateTime.of(2026, 10, 22, 10, 0)));
+    verify(readRepository)
+        .findIdsInWindow(
+            LocalDateTime.of(2026, 10, 22, 10, 0), LocalDateTime.of(2026, 10, 22, 10, 30));
+    verify(readRepository)
+        .findUnprocessedIdsInWindow(
+            LocalDateTime.of(2026, 10, 22, 8, 30), LocalDateTime.of(2026, 10, 22, 10, 0));
     assertThat(selection.getPassbookIds()).containsExactly(3L, 2L, 1L);
     assertThat(selection.getWindowStart()).isEqualTo("2026-10-22 08:30:00");
     assertThat(selection.getWindowEnd()).isEqualTo("2026-10-22 10:30:00");
@@ -480,15 +502,18 @@ class CinntraPassbookPayloadTest {
 
   @Test
   void dailySelectionIsYesterdayInIstForTheKindsReasonCode() {
-    lenient().when(readRepository.findUnprocessedIdsByReasonCode(any(), any(), any())).thenReturn(List.of());
+    lenient()
+        .when(readRepository.findUnprocessedIdsByReasonCode(any(), any(), any()))
+        .thenReturn(List.of());
     // 01:00 IST on the 22nd is still the 21st in UTC: the day must come from IST.
     long nominal = LocalDateTime.of(2026, 10, 22, 1, 0, 30).atZone(IST).toInstant().toEpochMilli();
 
-    CinntraPassbookSelection selection = service.selectPassbookIds(CinntraPassbookSyncKind.WALLET_RECHARGE, nominal);
+    CinntraPassbookSelection selection =
+        service.selectPassbookIds(CinntraPassbookSyncKind.WALLET_RECHARGE, nominal);
 
-    verify(readRepository).findUnprocessedIdsByReasonCode(26,
-        Timestamp.valueOf(LocalDateTime.of(2026, 10, 21, 0, 0)),
-        Timestamp.valueOf(LocalDateTime.of(2026, 10, 22, 0, 0)));
+    verify(readRepository)
+        .findUnprocessedIdsByReasonCode(
+            26, LocalDateTime.of(2026, 10, 21, 0, 0), LocalDateTime.of(2026, 10, 22, 0, 0));
     assertThat(selection.getPassbookIds()).isEmpty();
   }
 
@@ -515,13 +540,15 @@ class CinntraPassbookPayloadTest {
   }
 
   private CinntraPassbookSapDocEntry savedDocEntry() {
-    ArgumentCaptor<CinntraPassbookSapDocEntry> captor = ArgumentCaptor.forClass(CinntraPassbookSapDocEntry.class);
+    ArgumentCaptor<CinntraPassbookSapDocEntry> captor =
+        ArgumentCaptor.forClass(CinntraPassbookSapDocEntry.class);
     verify(docEntryRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
     return captor.getValue();
   }
 
-  private CinntraPassbookEntry entry(Long id, int reasonCode, String actionType, int amount, String comment) {
-    CinntraPassbookEntry e = new CinntraPassbookEntry();
+  private CinntraPassbookEntryRow entry(
+      Long id, int reasonCode, String actionType, int amount, String comment) {
+    CinntraPassbookEntryRow e = new CinntraPassbookEntryRow();
     e.setId(id);
     e.setSpid(SP_ID);
     e.setDate(ENTRY_DATE);
@@ -534,16 +561,16 @@ class CinntraPassbookPayloadTest {
     return e;
   }
 
-  private static CinntraPassbookSp sp(int id, String name) {
-    CinntraPassbookSp sp = new CinntraPassbookSp();
+  private static CinntraPassbookSpRow sp(int id, String name) {
+    CinntraPassbookSpRow sp = new CinntraPassbookSpRow();
     sp.setId(id);
     sp.setName(name);
     sp.setHubId(HUB_ID);
     return sp;
   }
 
-  private static CinntraPassbookHub hub() {
-    CinntraPassbookHub hub = new CinntraPassbookHub();
+  private static CinntraPassbookHubRow hub() {
+    CinntraPassbookHubRow hub = new CinntraPassbookHubRow();
     hub.setId(HUB_ID);
     hub.setHub("DELHI");
     hub.setState("Delhi");
@@ -555,8 +582,8 @@ class CinntraPassbookPayloadTest {
     return hub;
   }
 
-  private static CinntraPassbookSapMapping mapping(int spId, int typeCode, String sapId) {
-    CinntraPassbookSapMapping m = new CinntraPassbookSapMapping();
+  private static CinntraPassbookSapMappingRow mapping(int spId, int typeCode, String sapId) {
+    CinntraPassbookSapMappingRow m = new CinntraPassbookSapMappingRow();
     m.setId(typeCode);
     m.setSpId(spId);
     m.setTypeCode(typeCode);
@@ -564,17 +591,18 @@ class CinntraPassbookPayloadTest {
     return m;
   }
 
-  private static CinntraPassbookAccountCode accountCode(int reasonCode, String code) {
-    CinntraPassbookAccountCode a = new CinntraPassbookAccountCode();
-    a.setId(reasonCode);
+  private static CinntraPassbookAccountCodeRow accountCode(int reasonCode, String code) {
+    CinntraPassbookAccountCodeRow a = new CinntraPassbookAccountCodeRow();
     a.setReasonCode(reasonCode);
     a.setAccountCode(code);
     return a;
   }
 
-  /** Every repository answers from the fixture collections above, so a test edits data, not stubs. */
+  /**
+   * Every repository answers from the fixture collections above, so a test edits data, not stubs.
+   */
   private void wire() {
-    CinntraPassbookSapSeries series = new CinntraPassbookSapSeries();
+    CinntraPassbookSapSeriesRow series = new CinntraPassbookSapSeriesRow();
     series.setId(1);
     series.setSapWhsCode("DL-DL-1");
     series.setSalesOrderSeries(11);
@@ -586,33 +614,71 @@ class CinntraPassbookPayloadTest {
     session.setSessionId("SESSION-1");
 
     lenient().when(sessionRepository.findById(1)).thenReturn(Optional.of(session));
-    lenient().when(writeRepository.findForPosting(anyCollection())).thenAnswer(inv ->
-        inv.<Collection<Long>>getArgument(0).stream().map(passbook::get).filter(e -> e != null)
-            .collect(Collectors.toList()));
-    lenient().when(writeRepository.findPostedKeys(anyCollection(), any())).thenAnswer(inv ->
-        inv.<Collection<Integer>>getArgument(0).stream().filter(postedKeys::contains).collect(Collectors.toList()));
-    lenient().when(readRepository.findSps(anyCollection())).thenAnswer(inv ->
-        inv.<Collection<Integer>>getArgument(0).stream().map(sps::get).filter(s -> s != null)
-            .collect(Collectors.toList()));
-    lenient().when(readRepository.findHubs(anyCollection())).thenAnswer(inv ->
-        inv.<Collection<Integer>>getArgument(0).stream().map(hubs::get).filter(h -> h != null)
-            .collect(Collectors.toList()));
-    lenient().when(readRepository.findSapMappings(anyCollection(), anyCollection())).thenAnswer(inv -> {
-      Collection<Integer> spIds = inv.getArgument(0);
-      Collection<Integer> types = inv.getArgument(1);
-      return mappings.stream().filter(m -> spIds.contains(m.getSpId()) && types.contains(m.getTypeCode()))
-          .collect(Collectors.toList());
-    });
-    lenient().when(readRepository.findSpIdsWorkingInCategories(anyCollection(), anyCollection())).thenAnswer(inv ->
-        inv.<Collection<Integer>>getArgument(0).stream().filter(excludedCategorySps::contains)
-            .collect(Collectors.toList()));
+    lenient()
+        .when(writeRepository.findForPosting(anyCollection()))
+        .thenAnswer(
+            inv ->
+                inv.<Collection<Long>>getArgument(0).stream()
+                    .map(passbook::get)
+                    .filter(e -> e != null)
+                    .collect(Collectors.toList()));
+    lenient()
+        .when(writeRepository.findPostedKeys(anyCollection(), any()))
+        .thenAnswer(
+            inv ->
+                inv.<Collection<Integer>>getArgument(0).stream()
+                    .filter(postedKeys::contains)
+                    .collect(Collectors.toList()));
+    lenient()
+        .when(readRepository.findSps(anyCollection()))
+        .thenAnswer(
+            inv ->
+                inv.<Collection<Integer>>getArgument(0).stream()
+                    .map(sps::get)
+                    .filter(s -> s != null)
+                    .collect(Collectors.toList()));
+    lenient()
+        .when(readRepository.findHubs(anyCollection()))
+        .thenAnswer(
+            inv ->
+                inv.<Collection<Integer>>getArgument(0).stream()
+                    .map(hubs::get)
+                    .filter(h -> h != null)
+                    .collect(Collectors.toList()));
+    lenient()
+        .when(readRepository.findSapMappings(anyCollection(), anyCollection()))
+        .thenAnswer(
+            inv -> {
+              Collection<Integer> spIds = inv.getArgument(0);
+              Collection<Integer> types = inv.getArgument(1);
+              return mappings.stream()
+                  .filter(m -> spIds.contains(m.getSpId()) && types.contains(m.getTypeCode()))
+                  .collect(Collectors.toList());
+            });
+    lenient()
+        .when(readRepository.findSpIdsWorkingInCategories(anyCollection(), anyCollection()))
+        .thenAnswer(
+            inv ->
+                inv.<Collection<Integer>>getArgument(0).stream()
+                    .filter(excludedCategorySps::contains)
+                    .collect(Collectors.toList()));
     lenient().when(readRepository.findSeries(anyCollection())).thenReturn(List.of(series));
-    lenient().when(readRepository.findAccountCodes(anyCollection())).thenAnswer(inv ->
-        accountCodes.stream().filter(a -> inv.<Collection<Integer>>getArgument(0).contains(a.getReasonCode()))
-            .collect(Collectors.toList()));
-    lenient().when(readRepository.findOrderCostingCodes(anyCollection())).thenAnswer(inv ->
-        inv.<Collection<Long>>getArgument(0).stream().filter(orderCosting::containsKey)
-            .map(id -> costing(id, orderCosting.get(id))).collect(Collectors.toList()));
+    lenient()
+        .when(readRepository.findAccountCodes(anyCollection()))
+        .thenAnswer(
+            inv ->
+                accountCodes.stream()
+                    .filter(
+                        a -> inv.<Collection<Integer>>getArgument(0).contains(a.getReasonCode()))
+                    .collect(Collectors.toList()));
+    lenient()
+        .when(readRepository.findOrderCostingCodes(anyCollection()))
+        .thenAnswer(
+            inv ->
+                inv.<Collection<Long>>getArgument(0).stream()
+                    .filter(orderCosting::containsKey)
+                    .map(id -> costing(id, orderCosting.get(id)))
+                    .collect(Collectors.toList()));
     lenient().when(readRepository.findSpAddresses(eq(SP_ID))).thenReturn(List.of());
   }
 

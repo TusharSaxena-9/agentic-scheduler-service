@@ -67,7 +67,10 @@ final class SapStubServer implements AutoCloseable {
         .orElse(200);
   }
 
-  /** Canned JSON returned with {@code status} for any request whose path ends with {@code pathSuffix}. */
+  /**
+   * Canned JSON returned with {@code status} for any request whose path ends with {@code
+   * pathSuffix}.
+   */
   SapStubServer respondTo(String pathSuffix, int status, String json) {
     statusByPathSuffix.put(pathSuffix, status);
     return respondTo(pathSuffix, json);

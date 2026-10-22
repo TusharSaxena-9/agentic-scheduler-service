@@ -89,7 +89,7 @@ scheduler:
       description: Log in to Cinntra (SAP B1 Service Layer) and store the session id in tbl_sap_session
 
     - name: cinntra-passbook-commission-convenience-sync
-      workflow: com.yesmadam.schedulerservice.jobs.cinntraPassbook.workflow.CinntraPassbookCommissionConvenienceSyncWorkflow
+      workflow: com.yesmadam.schedulerservice.jobs.cinntrapassbook.workflow.CinntraPassbookCommissionConvenienceSyncWorkflow
       # Every SAP job runs on heavy. Chunked: 20 passbook entries per activity, heartbeating per
       # entry, so a failure costs one chunk and a slot is never held for the whole run.
       tier: heavy
@@ -108,7 +108,7 @@ scheduler:
       description: Post yesterday's SP commission and convenience-fee passbook entries to SAP as AR invoices
 
     - name: cinntra-passbook-journal-sync
-      workflow: com.yesmadam.schedulerservice.jobs.cinntraPassbook.workflow.CinntraPassbookJournalSyncWorkflow
+      workflow: com.yesmadam.schedulerservice.jobs.cinntrapassbook.workflow.CinntraPassbookJournalSyncWorkflow
       # Every SAP job runs on heavy, chunked as above.
       tier: heavy
       # tracking's CinntraPassbook.getPassbook, @Scheduled(cron = "0 0/30 * * * *") with no zone —
@@ -132,7 +132,7 @@ scheduler:
       description: Post the last 30 minutes of SP passbook movements to SAP as journal entries, vouchers and vendor payments
 
     - name: cinntra-passbook-wallet-booking-online-sync
-      workflow: com.yesmadam.schedulerservice.jobs.cinntraPassbook.workflow.CinntraPassbookWalletBookingOnlineSyncWorkflow
+      workflow: com.yesmadam.schedulerservice.jobs.cinntrapassbook.workflow.CinntraPassbookWalletBookingOnlineSyncWorkflow
       # Every SAP job runs on heavy, chunked as above.
       tier: heavy
       # tracking's CinntraPassbook.syncWalletAndBookingOnlineToSap, @Scheduled(cron = "0 0 4 * * *")
