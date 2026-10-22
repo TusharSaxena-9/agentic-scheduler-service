@@ -39,6 +39,9 @@ import lombok.extern.slf4j.Slf4j;
  *       tbl_payment_action_sap}, requestType 44; skipped when the reason has no account.
  * </ul>
  *
+ * <p>A {@link CinntraPassbookSapSessionException} is never counted against an entry: it is rethrown
+ * so the chunk fails and Temporal retries it.
+ *
  * <p>Every post records its outcome in {@code is_sap_processed} (1 on 2xx, 0 otherwise), which is
  * both what the next runs' retry window selects on and what a retried chunk skips on.
  *
@@ -167,8 +170,19 @@ public class CinntraPassbookJournalPoster {
       if (reasonCode == 40) {
         postMaterialEntry(sp, spDetail, hub, sapMap, dueDate, orderId, lookups, result);
         // No return: tracking falls through to the general entry. See class Javadoc.
+        try {
+          postGeneralEntry(sp, hub, sapMap, dueDate, orderId, lookups, result);
+        } catch (CinntraPassbookSapSessionException e) {
+          // The material post may already have flagged the row processed; a retried chunk would
+          // then skip it and the general entry would never post. Leave it for the retry window.
+          writeRepository.updateSapProcessed(sp.getId(), 0);
+          throw e;
+        }
+        return;
       }
       postGeneralEntry(sp, hub, sapMap, dueDate, orderId, lookups, result);
+    } catch (CinntraPassbookSapSessionException e) {
+      throw e;
     } catch (Exception e) {
       failed(result);
       log.error(
@@ -213,6 +227,8 @@ public class CinntraPassbookJournalPoster {
       payment.setBplId(hub.getSapBplId());
       payment.setDocObjectCode("46");
       record(sp, sapClient.post("VendorPayments", payment, orderId, 42, null), result);
+    } catch (CinntraPassbookSapSessionException e) {
+      throw e;
     } catch (Exception e) {
       log.error("Vendor payment failed for SP ID: {}", sp.getSpid(), e);
       failed(result);
@@ -262,6 +278,8 @@ public class CinntraPassbookJournalPoster {
       request.setJournalVoucher(journalVoucher);
 
       record(sp, sapClient.post("JournalVouchersService_Add", request, orderId, 43, null), result);
+    } catch (CinntraPassbookSapSessionException e) {
+      throw e;
     } catch (Exception e) {
       log.error("Journal voucher processing failed for SP ID: {}", sp.getSpid(), e);
       failed(result);
@@ -337,6 +355,8 @@ public class CinntraPassbookJournalPoster {
               sp, toSaving ? "Commission To Saving" : "Saving To Commission", dueDate, orderId);
       entry.setJournalEntryLines(List.of(debitLine, creditLine));
       record(sp, sapClient.post("JournalEntries", entry, orderId, 52, null), result);
+    } catch (CinntraPassbookSapSessionException e) {
+      throw e;
     } catch (Exception e) {
       log.error("Commission to saving processing failed for SP ID: {}", sp.getSpid(), e);
       failed(result);
@@ -398,6 +418,8 @@ public class CinntraPassbookJournalPoster {
           transferEntry(sp, "Commission to Material", dueDate, orderId);
       entry.setJournalEntryLines(List.of(debitLine, creditLine));
       record(sp, sapClient.post("JournalEntries", entry, orderId, 3, null), result);
+    } catch (CinntraPassbookSapSessionException e) {
+      throw e;
     } catch (Exception e) {
       log.error("Commission to material processing failed for SP ID: {}", sp.getSpid(), e);
       failed(result);
@@ -480,6 +502,8 @@ public class CinntraPassbookJournalPoster {
       entry.setJournalEntryLines(lines);
 
       record(sp, sapClient.post("JournalEntries", entry, orderId, 44, reasonCode), result);
+    } catch (CinntraPassbookSapSessionException e) {
+      throw e;
     } catch (Exception e) {
       log.error("General journal entry processing failed for SP ID: {}", sp.getSpid(), e);
       failed(result);

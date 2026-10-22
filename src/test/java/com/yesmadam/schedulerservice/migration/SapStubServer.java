@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,10 @@ final class SapStubServer implements AutoCloseable {
   private final List<Call> calls = new ArrayList<>();
   private final Map<String, String> responsesByPathSuffix = new LinkedHashMap<>();
   private final Map<String, Integer> statusByPathSuffix = new LinkedHashMap<>();
+
+  /** Session id to how many more requests it is still accepted for. */
+  private final Map<String, Integer> sessionAllowance = new HashMap<>();
+
   private String defaultResponse = "{}";
 
   SapStubServer() throws IOException {
@@ -42,9 +47,12 @@ final class SapStubServer implements AutoCloseable {
           synchronized (calls) {
             calls.add(new Call(path, body));
           }
-          byte[] out = responseFor(path).getBytes(StandardCharsets.UTF_8);
+          String cookie = exchange.getRequestHeaders().getFirst("Cookie");
+          boolean rejected = cookie != null && isRejected(cookie);
+          byte[] out =
+              (rejected ? INVALID_SESSION : responseFor(path)).getBytes(StandardCharsets.UTF_8);
           exchange.getResponseHeaders().add("Content-Type", "application/json");
-          exchange.sendResponseHeaders(statusFor(path), out.length);
+          exchange.sendResponseHeaders(rejected ? 401 : statusFor(path), out.length);
           exchange.getResponseBody().write(out);
           exchange.close();
         });
@@ -65,6 +73,40 @@ final class SapStubServer implements AutoCloseable {
         .map(Map.Entry::getValue)
         .findFirst()
         .orElse(200);
+  }
+
+  /** B1 Service Layer's body for an expired or unknown session. */
+  static final String INVALID_SESSION =
+      "{\"error\":{\"code\":301,\"message\":{\"lang\":\"en-us\",\"value\":\"Invalid session.\"}}}";
+
+  /** Every request carrying {@code B1SESSION=<sessionId>} gets B1's 401 "Invalid session." */
+  SapStubServer rejectSession(String sessionId) {
+    return rejectSessionAfter(sessionId, 0);
+  }
+
+  /**
+   * {@code sessionId} is accepted for {@code accepted} more requests, then rejected like an expiry.
+   */
+  SapStubServer rejectSessionAfter(String sessionId, int accepted) {
+    synchronized (sessionAllowance) {
+      sessionAllowance.put(sessionId, accepted);
+    }
+    return this;
+  }
+
+  private boolean isRejected(String cookie) {
+    synchronized (sessionAllowance) {
+      for (Map.Entry<String, Integer> e : sessionAllowance.entrySet()) {
+        if (cookie.contains("B1SESSION=" + e.getKey())) {
+          if (e.getValue() > 0) {
+            e.setValue(e.getValue() - 1);
+            return false;
+          }
+          return true;
+        }
+      }
+      return false;
+    }
   }
 
   /**

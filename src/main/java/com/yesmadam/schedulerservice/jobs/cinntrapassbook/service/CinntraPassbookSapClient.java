@@ -23,6 +23,7 @@ import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yesmadam.schedulerservice.jobs.cinntraLoginAndStoreSession.service.CinntraLoginAndStoreSessionService;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookBpAddress;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSapDocEntry;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSapErrorLog;
@@ -53,7 +54,14 @@ import lombok.extern.slf4j.Slf4j;
  *       than re-reading {@code tbl_sp} and {@code tbl_hub} — the same row tracking resolves.
  * </ul>
  *
- * <p>No method here throws: a failure comes back as an unsuccessful {@link
+ * <p>One addition tracking does not have: <b>an expired session is refreshed in place.</b> When SAP
+ * rejects the session (HTTP 401, or B1 error code 301), the client logs in once through {@link
+ * CinntraLoginAndStoreSessionService} — the same login the 30-minute session job runs — and retries
+ * the post with the new session. If SAP still rejects it, {@link
+ * CinntraPassbookSapSessionException} is thrown and the chunk fails for Temporal to retry; see that
+ * class for why. Tracking instead failed every remaining entry until the next scheduled login.
+ *
+ * <p>Otherwise no method here throws: a failure comes back as an unsuccessful {@link
  * CinntraPassbookSapResult}, as tracking's does.
  */
 @Slf4j
@@ -64,6 +72,9 @@ public class CinntraPassbookSapClient {
   private static final int SAP_CONNECT_TIMEOUT_MS = 10_000;
   private static final int SAP_READ_TIMEOUT_MS = 60_000;
   private static final Duration PATCH_TIMEOUT = Duration.ofMillis(10_000);
+
+  /** B1 Service Layer's error code for "Invalid session" / "session already timeout". */
+  private static final int SAP_INVALID_SESSION_CODE = 301;
 
   /** tracking's {@code Utilities.STATE_ABBREVIATIONS}; an unknown state maps to {@code ""}. */
   private static final Map<String, String> STATE_ABBREVIATIONS =
@@ -120,33 +131,79 @@ public class CinntraPassbookSapClient {
   private final CinntraPassbookSapDocEntryRepository sapDocEntryRepository;
   private final CinntraPassbookSapErrorLogRepository sapErrorLogRepository;
   private final CinntraPassbookReadRepository readRepository;
+  private final CinntraLoginAndStoreSessionService loginService;
 
-  /** Wires the session, doc-entry and error-log repositories, and the reader for addresses. */
+  /** Serialises in-place re-logins so concurrent chunks on this pod do not each log in. */
+  private final Object sessionRefreshLock = new Object();
+
+  /**
+   * Wires the session, doc-entry and error-log repositories, the reader for addresses, and the
+   * login service used to refresh a rejected session.
+   */
   public CinntraPassbookSapClient(
       CinntraPassbookSapSessionRepository sapSessionRepository,
       CinntraPassbookSapDocEntryRepository sapDocEntryRepository,
       CinntraPassbookSapErrorLogRepository sapErrorLogRepository,
-      CinntraPassbookReadRepository readRepository) {
+      CinntraPassbookReadRepository readRepository,
+      CinntraLoginAndStoreSessionService loginService) {
     this.sapSessionRepository = sapSessionRepository;
     this.sapDocEntryRepository = sapDocEntryRepository;
     this.sapErrorLogRepository = sapErrorLogRepository;
     this.readRepository = readRepository;
+    this.loginService = loginService;
   }
 
   /**
    * tracking's {@code sendJsonRequestForResult}: POST {@code body} to {@code <base>/<path>}, record
    * a {@code tbl_sap_doc_entries} row on success or a {@code tbl_sap_error_log} row on an HTTP
-   * error.
+   * error. A rejected session is refreshed once and the post retried; see the class Javadoc.
+   *
+   * @throws CinntraPassbookSapSessionException if SAP still rejects the session after a refresh
    */
   public CinntraPassbookSapResult post(
       String path, Object body, Long orderId, Integer requestType, Integer journalTypeCode) {
+    String sessionId =
+        sapSessionRepository
+            .findById(SAP_SESSION_ID)
+            .map(CinntraPassbookSapSession::getSessionId)
+            .orElse(null);
+    CinntraPassbookSapResult result =
+        sessionId == null
+            ? null
+            : send(path, body, orderId, requestType, journalTypeCode, sessionId);
+    if (result != null) {
+      return result;
+    }
+
+    String refreshed = refreshSession(sessionId);
+    result =
+        refreshed == null
+            ? null
+            : send(path, body, orderId, requestType, journalTypeCode, refreshed);
+    if (result == null) {
+      throw new CinntraPassbookSapSessionException(
+          "SAP rejected the session for " + path + " even after a re-login");
+    }
+    return result;
+  }
+
+  /**
+   * One POST with {@code sessionId}. Returns {@code null} when SAP rejected the session itself —
+   * nothing is recorded then, since the post is about to be retried — and the outcome otherwise.
+   */
+  private CinntraPassbookSapResult send(
+      String path,
+      Object body,
+      Long orderId,
+      Integer requestType,
+      Integer journalTypeCode,
+      String sessionId) {
     CinntraPassbookSapResult result = new CinntraPassbookSapResult();
     HttpURLConnection conn = null;
     try {
       String jsonRequest = objectMapper.writeValueAsString(body);
       log.info("JSON Request: {}", jsonRequest);
 
-      String sessionId = currentSapSessionId();
       conn = (HttpURLConnection) new URL(cinntraBaseUrl + path).openConnection();
       conn.setConnectTimeout(SAP_CONNECT_TIMEOUT_MS);
       conn.setReadTimeout(SAP_READ_TIMEOUT_MS);
@@ -166,6 +223,10 @@ public class CinntraPassbookSapClient {
       String responseText = readBody(conn, responseCode);
       log.info("Response Code: {}", responseCode);
 
+      if (isSessionRejected(responseCode, responseText)) {
+        log.warn("event=cinntra_session_rejected path={} status={}", path, responseCode);
+        return null;
+      }
       if (responseCode >= 400) {
         String extractedMessage = extractSapErrorMessage(responseText);
         result.setSuccess(false);
@@ -248,6 +309,8 @@ public class CinntraPassbookSapClient {
             retryResult.getErrorMessage());
       }
       return retryResult;
+    } catch (CinntraPassbookSapSessionException e) {
+      throw e;
     } catch (Exception e) {
       log.error(
           "[SAP-ADDR-RETRY] Unexpected error during address PATCH/retry for spId={} cardCode={}",
@@ -345,10 +408,45 @@ public class CinntraPassbookSapClient {
   }
 
   /**
-   * Tracking dereferences the {@code tbl_sap_session} row directly, so a missing row fails the post
-   * before any HTTP call and writes no error-log row. Throwing here, inside {@link #post}'s catch,
-   * keeps exactly that.
+   * True when SAP refused the session rather than the document: HTTP 401, or B1's {@code
+   * error.code} 301. A bad Key/userId at the Cinntra proxy also answers 401; the refresh then does
+   * not help, and the chunk fails — which is the right outcome for broken credentials too.
    */
+  private boolean isSessionRejected(int responseCode, String responseText) {
+    if (responseCode == 401) {
+      return true;
+    }
+    if (responseCode < 400) {
+      return false;
+    }
+    try {
+      JsonNode code = objectMapper.readTree(responseText).path("error").path("code");
+      return code.asInt(-1) == SAP_INVALID_SESSION_CODE;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  /**
+   * Logs in again unless another chunk already did, and returns the session to retry with — or
+   * {@code null} when there is still no new one. Reads on the writer: the login has just written
+   * the row and the replica may still hold {@code rejectedSessionId}.
+   */
+  private String refreshSession(String rejectedSessionId) {
+    synchronized (sessionRefreshLock) {
+      String current = sapSessionRepository.findSessionIdOnWriter(SAP_SESSION_ID).orElse(null);
+      if (current != null && !current.equals(rejectedSessionId)) {
+        log.info("event=cinntra_session_already_refreshed");
+        return current;
+      }
+      log.warn("event=cinntra_session_refresh reason=rejected_or_missing");
+      loginService.loginAndStoreSession();
+      String refreshed = sapSessionRepository.findSessionIdOnWriter(SAP_SESSION_ID).orElse(null);
+      return refreshed != null && !refreshed.equals(rejectedSessionId) ? refreshed : null;
+    }
+  }
+
+  /** The session the address-retry PATCH sends; a failed PATCH only means no address fix. */
   private String currentSapSessionId() {
     return sapSessionRepository
         .findById(SAP_SESSION_ID)

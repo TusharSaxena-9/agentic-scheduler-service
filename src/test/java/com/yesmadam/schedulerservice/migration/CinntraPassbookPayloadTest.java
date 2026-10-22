@@ -1,11 +1,13 @@
 package com.yesmadam.schedulerservice.migration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -33,6 +35,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yesmadam.schedulerservice.common.progress.ProgressReporter;
+import com.yesmadam.schedulerservice.jobs.cinntraLoginAndStoreSession.service.CinntraLoginAndStoreSessionService;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookChunkResult;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSapDocEntry;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSapSession;
@@ -54,6 +57,7 @@ import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassboo
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassbookJournalPoster;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassbookReader;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassbookSapClient;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassbookSapSessionException;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.service.CinntraPassbookSyncService;
 
 /**
@@ -75,6 +79,8 @@ class CinntraPassbookPayloadTest {
   private CinntraPassbookWriteRepository writeRepository;
   private CinntraPassbookSapDocEntryRepository docEntryRepository;
   private CinntraPassbookSapSessionRepository sessionRepository;
+  private CinntraPassbookSapErrorLogRepository errorLogRepository;
+  private CinntraLoginAndStoreSessionService loginService;
   private CinntraPassbookSyncService service;
 
   private final Map<Long, CinntraPassbookEntryRow> passbook = new HashMap<>();
@@ -93,13 +99,16 @@ class CinntraPassbookPayloadTest {
     writeRepository = mock(CinntraPassbookWriteRepository.class);
     docEntryRepository = mock(CinntraPassbookSapDocEntryRepository.class);
     sessionRepository = mock(CinntraPassbookSapSessionRepository.class);
+    errorLogRepository = mock(CinntraPassbookSapErrorLogRepository.class);
+    loginService = mock(CinntraLoginAndStoreSessionService.class);
 
     CinntraPassbookSapClient sapClient =
         new CinntraPassbookSapClient(
             sessionRepository,
             docEntryRepository,
-            mock(CinntraPassbookSapErrorLogRepository.class),
-            readRepository);
+            errorLogRepository,
+            readRepository,
+            loginService);
     ReflectionTestUtils.setField(sapClient, "cinntraBaseUrl", sap.baseUrl());
     ReflectionTestUtils.setField(sapClient, "cinntraKey", "k");
     ReflectionTestUtils.setField(sapClient, "cinntraUserId", "u");
@@ -515,6 +524,101 @@ class CinntraPassbookPayloadTest {
         .findUnprocessedIdsByReasonCode(
             26, LocalDateTime.of(2026, 10, 21, 0, 0), LocalDateTime.of(2026, 10, 22, 0, 0));
     assertThat(selection.getPassbookIds()).isEmpty();
+  }
+
+  // ================================================================
+  // Expired SAP session
+  // ================================================================
+
+  @Test
+  void aRejectedSessionIsRefreshedOnceAndThePostRetriedWithTheNewOne() throws Exception {
+    sap.rejectSession("SESSION-1");
+    givenLoginStores("SESSION-2");
+    entry(80L, 43, "DEBIT", 250, null);
+
+    CinntraPassbookChunkResult result = sync(CinntraPassbookSyncKind.JOURNAL, 80L);
+
+    verify(loginService).loginAndStoreSession();
+    assertThat(sap.calls()).hasSize(2);
+    assertThat(result.getSucceeded()).isEqualTo(1);
+    verify(writeRepository).updateSapProcessed(80L, 1);
+    // The rejection itself is not an entry failure, so it leaves no error-log row.
+    verify(errorLogRepository, never()).save(any());
+  }
+
+  @Test
+  void aSessionStillRejectedAfterReLoginFailsTheChunkInsteadOfEveryEntry() {
+    sap.rejectSession("SESSION-1");
+    givenLoginStores("SESSION-1"); // the login "succeeds" but nothing changes
+    entry(81L, 43, "DEBIT", 250, null);
+    entry(82L, 43, "DEBIT", 250, null);
+
+    assertThatThrownBy(() -> sync(CinntraPassbookSyncKind.JOURNAL, 81L, 82L))
+        .isInstanceOf(CinntraPassbookSapSessionException.class);
+
+    // Stopped at the first entry: the second was never sent, and nothing was marked failed.
+    assertThat(sap.calls()).hasSize(1);
+    verify(writeRepository, never()).updateSapProcessed(anyLong(), anyInt());
+    verify(errorLogRepository, never()).save(any());
+  }
+
+  @Test
+  void concurrentChunksReuseASessionAnotherChunkAlreadyRefreshed() {
+    sap.rejectSession("SESSION-1");
+    // Another chunk logged in between this one's read and its refresh.
+    lenient().when(sessionRepository.findSessionIdOnWriter(1)).thenReturn(Optional.of("SESSION-3"));
+    entry(83L, 43, "DEBIT", 250, null);
+
+    CinntraPassbookChunkResult result = sync(CinntraPassbookSyncKind.JOURNAL, 83L);
+
+    verify(loginService, never()).loginAndStoreSession();
+    assertThat(result.getSucceeded()).isEqualTo(1);
+  }
+
+  @Test
+  void aMissingSessionRowTriggersALoginBeforeAnythingIsSent() {
+    lenient().when(sessionRepository.findById(1)).thenReturn(Optional.empty());
+    givenLoginStores("SESSION-2");
+    // No row on the writer either, so nobody else has logged in yet.
+    lenient().when(sessionRepository.findSessionIdOnWriter(1)).thenReturn(Optional.empty());
+    entry(84L, 11, "DEBIT", 1180, null);
+
+    CinntraPassbookChunkResult result = sync(CinntraPassbookSyncKind.COMMISSION, 84L);
+
+    verify(loginService).loginAndStoreSession();
+    assertThat(sap.calls()).hasSize(1);
+    assertThat(result.getSucceeded()).isEqualTo(1);
+  }
+
+  @Test
+  void aSessionLostBetweenTheTwoReason40PostsLeavesTheEntryForTheRetryWindow() {
+    accountCodes.add(accountCode(40, "41000040"));
+    entry(85L, 40, "DEBIT", 90, null);
+    // The material post succeeds on SESSION-1; SAP then expires it before the general entry.
+    sap.rejectSessionAfter("SESSION-1", 1);
+    givenLoginStores("SESSION-1");
+
+    assertThatThrownBy(() -> sync(CinntraPassbookSyncKind.JOURNAL, 85L))
+        .isInstanceOf(CinntraPassbookSapSessionException.class);
+
+    verify(writeRepository).updateSapProcessed(85L, 1);
+    org.mockito.InOrder order = org.mockito.Mockito.inOrder(writeRepository);
+    order.verify(writeRepository).updateSapProcessed(85L, 1);
+    order.verify(writeRepository).updateSapProcessed(85L, 0);
+  }
+
+  /** The login writes {@code sessionId}, which the writer-side read then returns. */
+  private void givenLoginStores(String sessionId) {
+    lenient().when(sessionRepository.findSessionIdOnWriter(1)).thenReturn(Optional.of("SESSION-1"));
+    doAnswer(
+            inv -> {
+              lenient()
+                  .when(sessionRepository.findSessionIdOnWriter(1))
+                  .thenReturn(Optional.of(sessionId));
+              return null;
+            })
+        .when(loginService)
+        .loginAndStoreSession();
   }
 
   // ================================================================

@@ -27,6 +27,7 @@ import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookO
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSapDocEntry;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSapMapping;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSapSeries;
+import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSapSession;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSp;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookSpAddress;
 import com.yesmadam.schedulerservice.jobs.cinntrapassbook.model.CinntraPassbookWorkingCategory;
@@ -65,7 +66,8 @@ class CinntraPassbookQueryCompileTest {
             CinntraPassbookOrder.class,
             CinntraPassbookCategory.class,
             CinntraPassbookSpAddress.class,
-            CinntraPassbookSapDocEntry.class)) {
+            CinntraPassbookSapDocEntry.class,
+            CinntraPassbookSapSession.class)) {
       sources.addAnnotatedClass(entity);
     }
     sessionFactory = sources.buildMetadata().buildSessionFactory();
@@ -82,7 +84,10 @@ class CinntraPassbookQueryCompileTest {
     List<String> errors = new ArrayList<>();
     try (Session session = sessionFactory.openSession()) {
       for (Class<?> repository :
-          List.of(CinntraPassbookReadRepository.class, CinntraPassbookWriteRepository.class)) {
+          List.of(
+              CinntraPassbookReadRepository.class,
+              CinntraPassbookWriteRepository.class,
+              CinntraPassbookSapSessionRepository.class)) {
         for (Method method : repository.getDeclaredMethods()) {
           Query query = method.getAnnotation(Query.class);
           if (query == null) {
@@ -99,6 +104,6 @@ class CinntraPassbookQueryCompileTest {
     }
     assertThat(errors).isEmpty();
     // Guard against a vacuous pass if the annotations ever stop being found.
-    assertThat(checked).hasSize(15);
+    assertThat(checked).hasSize(16);
   }
 }

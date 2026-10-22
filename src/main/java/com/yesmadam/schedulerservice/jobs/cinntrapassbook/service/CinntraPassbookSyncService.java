@@ -179,6 +179,10 @@ public class CinntraPassbookSyncService {
    * Posts one chunk of {@code kind}'s entries, in the order given. Failures are isolated per entry,
    * as in tracking: one bad entry is counted and the rest still post.
    *
+   * <p>The one exception is a SAP session that stays rejected after a re-login: {@link
+   * CinntraPassbookSapSessionException} propagates and fails the chunk, since every later entry
+   * would fail the same way. Temporal retries it, and what this attempt posted is skipped.
+   *
    * <p>Not transactional: each entry is a SAP HTTP call, and a transaction around it would pin a
    * connection for SAP's response time (rule 13). The lookups are one short read-only transaction;
    * each flag and doc-entry write commits on its own, right after the post it records.
@@ -254,6 +258,8 @@ public class CinntraPassbookSyncService {
       } else {
         result.setFailed(result.getFailed() + 1);
       }
+    } catch (CinntraPassbookSapSessionException e) {
+      throw e;
     } catch (Exception e) {
       log.error(
           "{} posting failed for passbook id={}, spId={}, orderId={}",
